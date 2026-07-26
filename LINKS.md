@@ -117,7 +117,7 @@ These are **local development** URLs — the app runs entirely on your machine v
 | File | Purpose |
 |------|---------|
 | [README.md](./README.md) | As-built overview, architecture, setup, deviations |
-| [DEPLOY.md](./DEPLOY.md) | Free hosting guide (Vercel + HF Spaces + Supabase) |
+| [DEPLOY.md](./DEPLOY.md) | Free hosting guide (Vercel + Render + Supabase) |
 | [USER_GUIDE.md](./USER_GUIDE.md) | How to use the app, feature by feature |
 | [LICENSE](./LICENSE) | MIT license |
 | [equity_prism_prompt.md](./equity_prism_prompt.md) | Original 7-phase build spec |

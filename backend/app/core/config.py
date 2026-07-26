@@ -35,7 +35,6 @@ class Settings(BaseSettings):
     embedding_model: str = "all-MiniLM-L6-v2"
     rerank_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     embedding_backend: str = "local"
-    hf_api_token: str = ""
     rerank_enabled: bool = True
 
     upload_dir: str = "/app/data/uploads"

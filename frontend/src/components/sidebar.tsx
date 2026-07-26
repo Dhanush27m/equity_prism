@@ -17,6 +17,8 @@ import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
 
+const TRACES_URL = process.env.NEXT_PUBLIC_TRACES_URL;
+
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/chat", label: "Prism Chat", icon: MessageSquare },
@@ -66,16 +68,18 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       </nav>
 
       <div className="space-y-1 border-t border-white/5 px-3 py-3">
-        <a
-          href="http://localhost:3000"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-active/60 hover:text-white"
-        >
-          <Activity className="h-4 w-4 shrink-0" />
-          Agent Traces
-          <ExternalLink className="ml-auto h-3 w-3 opacity-60" />
-        </a>
+        {TRACES_URL && (
+          <a
+            href={TRACES_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-active/60 hover:text-white"
+          >
+            <Activity className="h-4 w-4 shrink-0" />
+            Agent Traces
+            <ExternalLink className="ml-auto h-3 w-3 opacity-60" />
+          </a>
+        )}
         <Link
           href="/settings"
           onClick={onNavigate}

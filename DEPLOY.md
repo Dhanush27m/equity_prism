@@ -1,13 +1,14 @@
 # Deploying Equity Prism for free (shareable public link)
 
-This guide hosts Equity Prism at **$0** using:
+This is the setup Equity Prism actually runs on — all free tiers, $0/month:
 
 | Piece | Service | Free? |
 |---|---|---|
 | Frontend (Next.js) | **Vercel** | ✅ |
-| Backend + RAG (FastAPI, embeddings) | **Hugging Face Spaces** (Docker, 16 GB RAM) | ✅ |
+| Backend + RAG (FastAPI) | **Render** (Docker web service) | ✅ |
 | Postgres + pgvector | **Supabase** | ✅ |
 | LLM | **Groq** | ✅ |
+| Embeddings | **fastembed** (ONNX, in-process — no external service) | ✅ |
 | Tracing (optional) | **LangFuse Cloud** | ✅ |
 
 The **same code** runs locally and hosted — the cloud behaviour is switched on entirely by environment variables (see [.env.example](./.env.example), "Hosted profile"). Your local `docker compose` setup is untouched.
@@ -16,112 +17,101 @@ The **same code** runs locally and hosted — the cloud behaviour is switched on
 
 ---
 
-## What changes in the hosted profile (already built in)
+## What the hosted profile does (already built in)
 
+- **No torch** → embeddings use `fastembed` (ONNX all-MiniLM-L6-v2, 384-dim), the reranker is disabled (`EMBEDDING_BACKEND=fastembed`, `RERANK_ENABLED=false`). Keeps the image small enough for free hosting.
 - **No Redis** → in-process caching (`CACHE_BACKEND=memory`)
 - **No Celery worker** → PDF ingestion runs as a FastAPI background task (`INGEST_MODE=background`)
-- **No Ollama** → Groq only (the app degrades gracefully if the fallback is absent)
+- **No Ollama** → Groq only
 - **No TimescaleDB** → only `pgvector` is required; the initial migration enables it automatically
-- **Supabase pooler** → asyncpg runs with `statement_cache_size=0` (`DB_POOLED=true`, `DB_SSL=true`)
+- **Supabase pooler** → asyncpg runs with `statement_cache_size=0` + non-verifying SSL (`DB_POOLED=true`, `DB_SSL=true`)
 - **Cross-origin frontend** → the browser calls the backend by absolute URL (`NEXT_PUBLIC_API_BASE`)
-- **Access gate** → optional shared password (`ACCESS_KEY` backend, `NEXT_PUBLIC_REQUIRE_ACCESS_KEY=1` frontend)
+- **Access gate** → shared password (`ACCESS_KEY` backend, `NEXT_PUBLIC_REQUIRE_ACCESS_KEY=1` frontend)
+
+The lightweight image is built from **`backend/Dockerfile.light`** (declared in **`render.yaml`**).
 
 ---
 
 ## Step 1 — Supabase (database)
 
 1. Create a project at https://supabase.com (pick a region near you; save the database password).
-2. **Database → Extensions →** enable **`vector`** (the migration also does this, but enabling it up front avoids surprises).
-3. **Project Settings → Database → Connection string.** You need two forms of the **pooler** connection (Transaction mode, port `6543`, host `...pooler.supabase.com`):
-   - **Async (app):**
+2. **Database → Extensions →** enable **`vector`**.
+3. **Project Settings → Database → Connection string.** Grab the two **pooler** connection strings:
+   - **Async (app), Transaction pooler, port 6543:**
      `postgresql+asyncpg://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:6543/postgres`
-   - **Sync (migrations/seed):** use port `5432` (session mode) with SSL:
+   - **Sync (migrations/seed), Session pooler, port 5432, with SSL:**
      `postgresql+psycopg://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres?sslmode=require`
 
 ## Step 2 — Seed the database from YOUR machine
 
-Do this locally — your home IP is far more reliable for yfinance than a datacenter. Point the sync/async URLs at Supabase and run the existing scripts:
+Do this locally — your home IP is far more reliable for yfinance than a datacenter. With Docker running and the backend container up, point the URLs at Supabase and run the seed scripts (the container already has all deps):
 
 ```bash
-# From the project root, in a shell where these env vars are set to your Supabase URLs:
-export DATABASE_URL="postgresql+asyncpg://postgres.<ref>:<pw>@aws-0-<region>.pooler.supabase.com:6543/postgres"
-export DATABASE_URL_SYNC="postgresql+psycopg://postgres.<ref>:<pw>@aws-0-<region>.pooler.supabase.com:5432/postgres?sslmode=require"
-export DB_POOLED=true DB_SSL=true
+# Create a seed.env file with your Supabase URLs:
+#   DATABASE_URL=postgresql+asyncpg://...:6543/postgres
+#   DATABASE_URL_SYNC=postgresql+psycopg://...:5432/postgres?sslmode=require
+#   DB_POOLED=true
+#   DB_SSL=true
 
-cd backend
-pip install -r requirements.txt          # or reuse the backend container / a venv
-alembic upgrade head                      # creates all tables + pgvector + HNSW/GIN indexes
-python -m app.seed.seed_companies         # 50 Nifty stocks
-python -m app.services.refresh            # metrics + risk signals (~5-7 min)
+docker exec --env-file seed.env equity-prism_backend alembic upgrade head
+docker exec --env-file seed.env equity-prism_backend python -m app.seed.seed_companies
+docker exec --env-file seed.env equity-prism_backend python -m app.services.refresh   # ~5-7 min
 ```
 
 Verify in the Supabase table editor that `companies` has 50 rows.
 
-## Step 3 — Hugging Face Space (backend)
+## Step 3 — GitHub
 
-1. Create a **Space** at https://huggingface.co/new-space → **SDK: Docker**, **Blank**. Make it **Public** (private Spaces sleep more aggressively) — the access gate protects it.
-2. Put the **backend** into the Space repo. Easiest: clone the Space, copy the contents of this repo's `backend/` into it, and rename **`Dockerfile.hf` → `Dockerfile`**.
-3. Add a `README.md` to the Space root with this frontmatter so HF knows the port:
+Render deploys from a Git repo, so push this project to GitHub (`git push origin main`). The repo already contains `render.yaml` and `backend/Dockerfile.light`.
 
-   ```yaml
-   ---
-   title: Equity Prism API
-   sdk: docker
-   app_port: 7860
-   ---
-   ```
-4. **Space → Settings → Variables and secrets**, add these **secrets**:
+## Step 4 — Render (backend)
 
-   | Name | Value |
+1. Go to https://render.com → **Sign in with GitHub**.
+2. **New + → Blueprint** → select your repo. Render detects **`render.yaml`** and a service named **`equity-prism-api`**.
+3. Fill in the secret env vars it prompts for:
+
+   | Key | Value |
    |---|---|
-   | `DATABASE_URL` | your Supabase **async** URL (port 6543) |
-   | `DATABASE_URL_SYNC` | your Supabase **sync** URL (port 5432, `?sslmode=require`) |
+   | `DATABASE_URL` | Supabase **async** URL (port 6543) |
+   | `DATABASE_URL_SYNC` | Supabase **sync** URL (port 5432, `?sslmode=require`) |
    | `GROQ_API_KEY` | your Groq key |
-   | `DB_POOLED` | `true` |
-   | `DB_SSL` | `true` |
-   | `ACCESS_KEY` | a password you choose (e.g. a random string) |
-   | `CORS_ORIGINS` | your Vercel URL, e.g. `https://equity-prism.vercel.app` |
-   | `RUN_MIGRATIONS` | `0` (you already migrated in Step 2) |
-   | `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` / `LANGFUSE_HOST` | *(optional)* LangFuse Cloud keys |
+   | `ACCESS_KEY` | a password you choose |
 
-   `CACHE_BACKEND=memory`, `INGEST_MODE=background`, and the writable cache/upload dirs are already baked into `Dockerfile.hf`.
-5. The Space builds automatically. First build takes a while (installs CPU torch + deps). When it's running, your backend base URL is:
-   `https://<your-username>-<space-name>.hf.space`
-   Check `https://<...>.hf.space/api/health` → should return `{"status":"ok"}`.
+   `DB_POOLED`, `DB_SSL`, `CORS_ORIGINS`, `RUN_MIGRATIONS`, and the fastembed/cache settings are already set by `render.yaml` / the Dockerfile.
+4. **Apply**. Render builds the lightweight image (~2-3 min) and starts it. Your backend URL is like `https://equity-prism-api.onrender.com`. Check `/api/health` → `{"status":"ok"}`.
 
-## Step 4 — Vercel (frontend)
+## Step 5 — Vercel (frontend)
 
-1. Push this repo to GitHub (if you haven't).
-2. At https://vercel.com → **New Project** → import the repo → set **Root Directory** to `frontend`.
-3. **Environment Variables:**
+1. https://vercel.com → **Continue with GitHub** → **Add New → Project** → import the repo.
+2. Set **Root Directory** to **`frontend`**.
+3. Environment variables:
 
    | Name | Value |
    |---|---|
-   | `NEXT_PUBLIC_API_BASE` | your HF Space base URL, e.g. `https://<user>-<space>.hf.space` |
-   | `NEXT_PUBLIC_REQUIRE_ACCESS_KEY` | `1` (shows the password gate) |
+   | `NEXT_PUBLIC_API_BASE` | your Render URL, e.g. `https://equity-prism-api.onrender.com` |
+   | `NEXT_PUBLIC_REQUIRE_ACCESS_KEY` | `1` |
 
-4. **Deploy.** Vercel gives you `https://<project>.vercel.app`.
-5. Go back to the HF Space secrets and make sure `CORS_ORIGINS` is exactly that Vercel URL, then restart the Space (Settings → Factory reboot).
+4. **Deploy.** Vercel gives you `https://<project>.vercel.app` — that's your shareable link.
+5. (Optional) In Render, set `CORS_ORIGINS` to the exact Vercel URL instead of `*`.
 
-## Step 5 — Try it
+## Step 6 — Try it
 
-Open your Vercel URL → enter the `ACCESS_KEY` at the gate → the app loads and talks to the HF backend, which reads/writes Supabase. Chat streams from Groq.
+Open your Vercel URL → enter the `ACCESS_KEY` at the gate → the app loads and talks to Render, which reads/writes Supabase and streams from Groq.
 
 ---
 
 ## Known limitations (free tier)
 
-- **Cold start:** the HF Space sleeps after ~48 h idle; the first visit takes ~30–60 s to wake and load the embedding models. Uploaded-PDF *files* on the Space are ephemeral (reset on restart), but their extracted **chunks live in Supabase**, so document Q&A keeps working after a restart.
-- **Supabase free pauses after ~7 days idle** — visit the dashboard weekly (or click your app) to keep it awake.
-- **yfinance from HF IPs** may be throttled; the seeded data still displays, only live refreshes are affected. Re-run `app.services.refresh` from your machine to update prices.
-- **Groq free rate limits** are fine for demo traffic; heavy use will throttle.
+- **Cold start:** Render's free service sleeps after ~15 min idle; the first visit takes ~50–60 s to wake, and the first document-RAG query downloads the fastembed model (~20 s more). Normal for free hosting.
+- **Supabase free pauses after ~7 days idle** — visit the app weekly to keep it awake.
+- **yfinance from datacenter IPs** may be throttled; seeded data still displays. Re-run `app.services.refresh` from your machine to update prices.
+- **Groq free rate limits** are fine for demo traffic.
 
 ## Troubleshooting
 
 | Symptom | Fix |
 |---|---|
-| Frontend loads but every call fails | `NEXT_PUBLIC_API_BASE` wrong, or `CORS_ORIGINS` on the Space doesn't match the Vercel URL |
-| 401 on every request | `ACCESS_KEY` mismatch — the gate password must equal the Space's `ACCESS_KEY` |
-| Backend build fails / OOM | HF build limit — the `Dockerfile.hf` already uses CPU-only torch to stay small; retry the build |
+| Frontend loads but every call fails | `NEXT_PUBLIC_API_BASE` wrong, or `CORS_ORIGINS` on Render doesn't allow the Vercel URL |
+| 401 on every request | `ACCESS_KEY` mismatch — the gate password must equal Render's `ACCESS_KEY` |
 | `prepared statement` errors | `DB_POOLED` must be `true` when using Supabase's pooler |
-| Migrations didn't run | set `RUN_MIGRATIONS=1` on the Space once, or run `alembic upgrade head` locally against Supabase |
+| Migrations didn't run | run `alembic upgrade head` locally against Supabase (Step 2), or set `RUN_MIGRATIONS=1` on Render once |

@@ -266,14 +266,15 @@ docker exec equity-prism_backend python -m app.eval.rag_eval
 
 ## Deploy for free (shareable link)
 
-The app can be hosted at **$0** on **Vercel** (frontend) + **Hugging Face Spaces** (backend, 16 GB free) + **Supabase** (Postgres + pgvector) + **Groq** (LLM). The **same code** runs locally and hosted — a "hosted profile" is switched on purely by env vars, so `docker compose` locally is untouched:
+The app can be hosted at **$0** on **Vercel** (frontend) + **Render** (backend) + **Supabase** (Postgres + pgvector) + **Groq** (LLM). The **same code** runs locally and hosted — a "hosted profile" is switched on purely by env vars, so `docker compose` locally is untouched:
 
+- `EMBEDDING_BACKEND=fastembed` (ONNX all-MiniLM, 384-dim — **no torch**) + `RERANK_ENABLED=false` → a small image that fits free hosting
 - `CACHE_BACKEND=memory` (no Redis) · `INGEST_MODE=background` (no Celery worker — PDF ingest runs as a FastAPI background task) · Ollama dropped (Groq only)
 - `DB_POOLED=true` + `DB_SSL=true` for Supabase's pooler (asyncpg `statement_cache_size=0`); only `pgvector` is required (the initial migration enables it)
 - `NEXT_PUBLIC_API_BASE` points the browser at the remote backend (CORS open); `ACCESS_KEY` + `NEXT_PUBLIC_REQUIRE_ACCESS_KEY=1` add a shared-password gate so a public URL can't burn your Groq quota
-- Backend HF image: `backend/Dockerfile.hf` (CPU-only torch, listens on `$PORT`)
+- Backend image: `backend/Dockerfile.light` (fastembed, listens on `$PORT`), deployed via `render.yaml`
 
-**Full step-by-step: [DEPLOY.md](./DEPLOY.md).** Trade-offs on free tiers: cold starts (~30–60 s wake), Supabase's ~7-day idle pause, and possible yfinance throttling from datacenter IPs.
+**Full step-by-step: [DEPLOY.md](./DEPLOY.md).** Trade-offs on free tiers: cold starts (~50–60 s wake on Render), Supabase's ~7-day idle pause, and possible yfinance throttling from datacenter IPs.
 
 ---
 
