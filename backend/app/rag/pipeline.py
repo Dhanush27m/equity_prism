@@ -2,8 +2,11 @@ import asyncio
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.rag import embeddings, reranker
 from app.rag.retrieval import hybrid_retrieve
+
+settings = get_settings()
 
 CANDIDATE_K = 20
 TOP_N = 5
@@ -40,7 +43,10 @@ async def research(db: AsyncSession, user_id: int, question: str) -> dict:
     candidates = await hybrid_retrieve(db, user_id, question, query_emb, CANDIDATE_K, CANDIDATE_K)
     if not candidates:
         return {"context": "", "citations": [], "chunk_ids": [], "top_chunks": []}
-    top = await asyncio.to_thread(reranker.rerank, question, candidates, TOP_N)
+    if settings.rerank_enabled:
+        top = await asyncio.to_thread(reranker.rerank, question, candidates, TOP_N)
+    else:
+        top = candidates[:TOP_N]
     context, citations = _build_context(top)
     return {
         "context": context,

@@ -13,7 +13,12 @@ def _connect_args() -> dict:
         args["statement_cache_size"] = 0
         args["prepared_statement_cache_size"] = 0
     if settings.db_ssl:
-        args["ssl"] = True
+        import ssl
+
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        args["ssl"] = ctx
     return args
 
 

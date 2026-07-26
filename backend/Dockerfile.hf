@@ -23,7 +23,8 @@ RUN pip install -r requirements.txt
 
 COPY . .
 
-RUN mkdir -p /tmp/uploads /tmp/hf && chmod -R 777 /tmp/uploads /tmp/hf
+RUN sed -i 's/\r$//' start.sh \
+    && mkdir -p /tmp/uploads /tmp/hf && chmod -R 777 /tmp/uploads /tmp/hf
 
 EXPOSE 7860
 

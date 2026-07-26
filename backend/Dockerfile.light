@@ -1,0 +1,29 @@
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    HF_HOME=/tmp/hf \
+    FASTEMBED_CACHE_PATH=/tmp/fastembed \
+    UPLOAD_DIR=/tmp/uploads \
+    CACHE_BACKEND=memory \
+    INGEST_MODE=background \
+    EMBEDDING_BACKEND=fastembed \
+    RERANK_ENABLED=false
+
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements-hosted.txt .
+RUN pip install --upgrade pip && pip install -r requirements-hosted.txt
+
+COPY . .
+
+RUN sed -i 's/\r$//' start.sh && mkdir -p /tmp/uploads && chmod -R 777 /tmp/uploads
+
+EXPOSE 7860
+
+CMD ["sh", "start.sh"]

@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: equity-prism-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile.light
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_URL_SYNC
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: ACCESS_KEY
+        sync: false
+      - key: DB_POOLED
+        value: "true"
+      - key: DB_SSL
+        value: "true"
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: RUN_MIGRATIONS
+        value: "0"

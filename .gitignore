@@ -22,5 +22,6 @@ docs/screenshots/*.tmp
 
 # local secrets / scratch (never commit)
 supabasedbpass
+huggingfacetoken
 *.secret
-image.png
+*.png
