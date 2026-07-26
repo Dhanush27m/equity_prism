@@ -1,0 +1,137 @@
+name: equity-prism
+
+services:
+  db:
+    image: timescale/timescaledb-ha:pg16
+    container_name: equity-prism_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${APP_DB_NAME}
+    ports:
+      - "5432:5432"
+    volumes:
+      - equity-prism_db_data:/home/postgres/pgdata
+      - ./infra/db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${APP_DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks:
+      - equity-prism_net
+
+  redis:
+    image: redis:7-alpine
+    container_name: equity-prism_redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - equity-prism_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks:
+      - equity-prism_net
+
+  ollama:
+    image: ollama/ollama
+    container_name: equity-prism_ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - equity-prism_ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+    networks:
+      - equity-prism_net
+
+  langfuse:
+    image: langfuse/langfuse:2
+    container_name: equity-prism_langfuse
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${LANGFUSE_DATABASE_URL}
+      NEXTAUTH_URL: ${LANGFUSE_NEXTAUTH_URL}
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET}
+      SALT: ${LANGFUSE_SALT}
+      TELEMETRY_ENABLED: "false"
+      LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: "false"
+    ports:
+      - "3000:3000"
+    networks:
+      - equity-prism_net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: equity-prism-backend:latest
+    container_name: equity-prism_backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - equity-prism_uploads:/app/data/uploads
+      - equity-prism_hf_cache:/root/.cache/huggingface
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health').status==200 else 1)\""]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+    networks:
+      - equity-prism_net
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: equity-prism-backend:latest
+    container_name: equity-prism_worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - equity-prism_uploads:/app/data/uploads
+      - equity-prism_hf_cache:/root/.cache/huggingface
+    command: celery -A app.tasks.celery_app:celery_app worker --loglevel=info --concurrency=1
+    networks:
+      - equity-prism_net
+
+volumes:
+  equity-prism_db_data:
+  equity-prism_redis_data:
+  equity-prism_ollama_data:
+  equity-prism_hf_cache:
+  equity-prism_uploads:
+
+networks:
+  equity-prism_net:
+    name: equity-prism_net

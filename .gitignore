@@ -1,0 +1,26 @@
+.env
+*.env.local
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+node_modules/
+.next/
+out/
+npm-debug.log*
+yarn-error.log*
+
+.DS_Store
+*.log
+
+backend/uploads/
+docs/screenshots/*.tmp
+
+# local secrets / scratch (never commit)
+supabasedbpass
+*.secret
+image.png
