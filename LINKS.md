@@ -1,46 +1,34 @@
 # Equity Prism — Links
 
-All URLs for the project: local services, frontend pages, API endpoints, and external references.
-These are **local development** URLs — the app runs entirely on your machine via Docker Compose (backend) and `npm run dev` (frontend). Nothing is publicly deployed.
+All URLs for the deployed project: the live app, backend API, endpoints, and external services.
 
 ---
 
-## Local services
+## Live app
 
 | Service | URL | Notes |
 |---------|-----|-------|
-| **Frontend (app)** | http://localhost:3001 | Next.js UI — start with `cd frontend && npm run dev` |
-| **Backend API** | http://localhost:8000 | FastAPI |
-| **API health** | http://localhost:8000/api/health | Liveness check |
-| **API docs (Swagger UI)** | http://localhost:8000/docs | Interactive, try endpoints in-browser |
-| **API docs (ReDoc)** | http://localhost:8000/redoc | Read-only reference |
-| **OpenAPI schema** | http://localhost:8000/openapi.json | Raw spec |
-| **LangFuse (tracing UI)** | http://localhost:3000 | Agent traces: tokens, latency, cost |
-| **Ollama** | http://localhost:11434 | Local LLM fallback (`llama3.1:8b`) |
-| **PostgreSQL** | localhost:5432 | DBs: `equity_prism` (app), `langfuse` |
-| **Redis** | localhost:6379 | db0 cache · db1 Celery broker · db2 Celery result |
+| **App (frontend)** | https://equity-prism.vercel.app | The shareable link — open, enter the access key, use it |
+| **Backend API** | https://equity-prism-api.onrender.com | FastAPI on Render |
+| **API health** | https://equity-prism-api.onrender.com/api/health | Liveness check (no key needed) |
+
+> All API routes except `/api/health` require the `X-Access-Key` header (the app sends it automatically after you enter the access key at the gate).
 
 ---
 
-## Frontend pages (http://localhost:3001)
+## Hosting dashboards (owner)
 
-| Page | URL |
-|------|-----|
-| Dashboard | http://localhost:3001/ |
-| Company (dynamic) | http://localhost:3001/company/RELIANCE |
-| Prism Chat | http://localhost:3001/chat |
-| Compare | http://localhost:3001/compare |
-| Portfolio | http://localhost:3001/portfolio |
-| Documents | http://localhost:3001/documents |
-| Screener | http://localhost:3001/screener |
-| News | http://localhost:3001/news |
-| Settings | http://localhost:3001/settings |
-
-> Company pages are dynamic — swap `RELIANCE` for any seeded Nifty 50 symbol (e.g. `TCS`, `INFY`, `HDFCBANK`).
+| Platform | Purpose | URL |
+|----------|---------|-----|
+| **Vercel** | Frontend hosting | https://vercel.com/dashboard |
+| **Render** | Backend hosting | https://dashboard.render.com |
+| **Supabase** | Postgres + pgvector database | https://supabase.com/dashboard |
+| **Groq** | LLM API key & usage | https://console.groq.com |
+| **LangFuse Cloud** | Agent tracing (optional) | https://cloud.langfuse.com |
 
 ---
 
-## API endpoints (base: http://localhost:8000/api)
+## API endpoints (base: https://equity-prism-api.onrender.com/api)
 
 ### Health
 - `GET /api/health`
@@ -80,11 +68,10 @@ These are **local development** URLs — the app runs entirely on your machine v
 
 | What | Link |
 |------|------|
-| Groq API console (get/manage the LLM key) | https://console.groq.com |
+| Groq API console (LLM key) | https://console.groq.com |
 | Groq docs | https://console.groq.com/docs |
-| yfinance (Yahoo Finance market data) | https://github.com/ranaroussi/yfinance |
+| yfinance (market data) | https://github.com/ranaroussi/yfinance |
 | Google News RSS (news source) | https://news.google.com/rss |
-| Ollama (model registry) | https://ollama.com/library/llama3.1 |
 
 ---
 
@@ -103,11 +90,9 @@ These are **local development** URLs — the app runs entirely on your machine v
 | SQLAlchemy 2 (async) | https://docs.sqlalchemy.org/en/20/ |
 | Alembic | https://alembic.sqlalchemy.org |
 | LangGraph | https://langchain-ai.github.io/langgraph/ |
-| LangFuse (self-hosted) | https://langfuse.com/docs |
-| Celery | https://docs.celeryq.dev |
+| LangFuse | https://langfuse.com/docs |
 | pgvector | https://github.com/pgvector/pgvector |
-| TimescaleDB | https://docs.timescale.com |
-| sentence-transformers | https://www.sbert.net |
+| fastembed | https://github.com/qdrant/fastembed |
 | RAGAS (metric definitions) | https://docs.ragas.io |
 
 ---
@@ -116,11 +101,7 @@ These are **local development** URLs — the app runs entirely on your machine v
 
 | File | Purpose |
 |------|---------|
-| [README.md](./README.md) | As-built overview, architecture, setup, deviations |
+| [README.md](./README.md) | Overview, architecture, tech stack, endpoints |
 | [DEPLOY.md](./DEPLOY.md) | Free hosting guide (Vercel + Render + Supabase) |
 | [USER_GUIDE.md](./USER_GUIDE.md) | How to use the app, feature by feature |
 | [LICENSE](./LICENSE) | MIT license |
-| [equity_prism_prompt.md](./equity_prism_prompt.md) | Original 7-phase build spec |
-| [equity_prism_improvements.md](./equity_prism_improvements.md) | Architecture decisions from reference-repo research |
-| [equity_prism_similar_resources.md](./equity_prism_similar_resources.md) | Reference resources |
-| [.env.example](./.env.example) | Environment variable template |

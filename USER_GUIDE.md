@@ -1,8 +1,8 @@
 # Equity Prism — User Guide
 
-How to use Equity Prism as a user: what each part of the app does and the things you can do with it.
+How to use Equity Prism: what each part of the app does and the things you can do with it.
 
-Equity Prism is a local AI equity-research assistant for Indian stocks (NSE/BSE). It combines live market data, financial statements, a multi-agent AI analyst (named **Prism**), and document Q&A over your own PDFs — all running on your own machine.
+Equity Prism is a live AI equity-research assistant for Indian stocks (NSE/BSE). It combines market data, financial statements, a multi-agent AI analyst (named **Prism**), and document Q&A over your own PDFs — all in the browser.
 
 > This is a research and learning tool. It is **not** personalised investment advice.
 
@@ -10,22 +10,11 @@ Equity Prism is a local AI equity-research assistant for Indian stocks (NSE/BSE)
 
 ## 1. Getting started
 
-**Start the backend** (once, from the project folder):
+1. Open the app: **https://equity-prism.vercel.app**
+2. Enter the **access key** at the prompt (the shared password for the app).
+3. You're in. Navigate using the **left sidebar**. The **top bar** has a stock search box (type a name or symbol like `TCS` or `Reliance`) and a **light/dark theme toggle**.
 
-```bash
-docker compose up -d
-```
-
-**Start the app (frontend):**
-
-```bash
-cd frontend
-npm run dev
-```
-
-Then open **http://localhost:3001** in your browser.
-
-You navigate using the **left sidebar**. The **top bar** has a stock search box (type a name or symbol like `TCS` or `Reliance`) and a **light/dark theme toggle**.
+> First load after a while may take ~1 minute — the free backend wakes from sleep. Give it a moment and it stays fast afterwards.
 
 ---
 
@@ -114,9 +103,7 @@ Theme and app preferences.
 - **Symbols:** use NSE tickers without a suffix in the UI (e.g. `TCS`, `RELIANCE`, `INFY`). The app handles the `.NS`/`.BO` mapping.
 - **Two stocks with no data:** `LTIM` and `TATAMOTORS` currently have no numbers from Yahoo Finance (a demerger / symbol change) — their name and sector show, but metrics are blank by design (never faked).
 - **Citations:** in chat, expand the citations under an answer to see exactly what a claim is based on — stored financials, news, or a document page.
-- **Freshness:** market data is cached and refreshed periodically. To force-refresh all stocks, an admin can run the refresh job (see README).
-- **Privacy:** everything runs locally. Your uploaded documents, portfolio, and chats stay on your machine. Only the LLM prompts go to the Groq API (or fully local Ollama as fallback).
-- **Agent traces (optional):** if LangFuse is enabled, the sidebar "Agent Traces" link opens a dashboard showing each AI call with token counts, latency, and cost.
+- **First load / slow response:** the free backend sleeps when idle; the first request after a pause wakes it (~1 min), then it's fast. If a chat errors once and works on retry, the AI briefly hit a rate limit and retried.
 
 ---
 
@@ -133,11 +120,11 @@ Theme and app preferences.
 
 ## 5. Quick troubleshooting
 
-| Symptom | Fix |
-|---------|-----|
-| Page won't load at :3001 | Frontend isn't running — `cd frontend && npm run dev` |
-| Data/charts empty or errors | Backend may be down — `docker compose up -d`, then check http://localhost:8000/api/health |
-| Uploaded PDF stuck on "processing" | The background worker needs to be running — `docker compose up -d worker` |
-| Chat is slow or errors once, then works | The AI briefly hit a rate limit and retried/fell back to the local model — try again |
+| Symptom | Likely cause / fix |
+|---------|--------------------|
+| Everything shows "something went wrong" | Backend is waking up (wait ~1 min) — or the Supabase database is paused; open the Supabase dashboard and click **Restore**. |
+| First page load is very slow | Normal free-tier cold start — the backend was asleep and is waking. |
+| Chat errors once, then works | The AI briefly hit a rate limit and retried — try again. |
+| Uploaded PDF stuck on "processing" | Give it a moment; large PDFs take longer to embed on the free instance. |
 
-For full setup and architecture, see **[README.md](./README.md)**. For every URL and endpoint, see **[LINKS.md](./LINKS.md)**.
+For the full overview and architecture, see **[README.md](./README.md)**. For every link and endpoint, see **[LINKS.md](./LINKS.md)**.

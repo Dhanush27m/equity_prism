@@ -25,3 +25,7 @@ supabasedbpass
 huggingfacetoken
 *.secret
 *.png
+
+# personal / resume notes (not part of the project)
+RESUME_DEEP_DIVE.docx
+*.docx

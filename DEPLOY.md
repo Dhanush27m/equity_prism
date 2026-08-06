@@ -11,7 +11,7 @@ This is the setup Equity Prism actually runs on — all free tiers, $0/month:
 | Embeddings | **fastembed** (ONNX, in-process — no external service) | ✅ |
 | Tracing (optional) | **LangFuse Cloud** | ✅ |
 
-The **same code** runs locally and hosted — the cloud behaviour is switched on entirely by environment variables (see [.env.example](./.env.example), "Hosted profile"). Your local `docker compose` setup is untouched.
+The cloud behaviour is switched on entirely by environment variables (see [.env.example](./.env.example), "Hosted profile") — the lightweight image (`backend/Dockerfile.light`) drops torch, Redis, Celery, and Ollama so it fits free tiers.
 
 > ⚠️ **Before sharing publicly:** set an `ACCESS_KEY` (below). Without it, anyone with the link can use the app and spend your Groq quota.
 
@@ -44,21 +44,23 @@ The lightweight image is built from **`backend/Dockerfile.light`** (declared in 
 
 ## Step 2 — Seed the database from YOUR machine
 
-Do this locally — your home IP is far more reliable for yfinance than a datacenter. With Docker running and the backend container up, point the URLs at Supabase and run the seed scripts (the container already has all deps):
+Do this from your own machine — a home IP is far more reliable for yfinance than a datacenter. From `backend/`, install the deps, point the env at Supabase, and run the seed scripts:
 
 ```bash
-# Create a seed.env file with your Supabase URLs:
-#   DATABASE_URL=postgresql+asyncpg://...:6543/postgres
-#   DATABASE_URL_SYNC=postgresql+psycopg://...:5432/postgres?sslmode=require
-#   DB_POOLED=true
-#   DB_SSL=true
+cd backend
+pip install -r requirements.txt
 
-docker exec --env-file seed.env equity-prism_backend alembic upgrade head
-docker exec --env-file seed.env equity-prism_backend python -m app.seed.seed_companies
-docker exec --env-file seed.env equity-prism_backend python -m app.services.refresh   # ~5-7 min
+# Point at Supabase (async URL for the app, sync URL for Alembic):
+export DATABASE_URL='postgresql+asyncpg://postgres.<ref>:<pw>@aws-0-<region>.pooler.supabase.com:6543/postgres'
+export DATABASE_URL_SYNC='postgresql+psycopg://postgres.<ref>:<pw>@aws-0-<region>.pooler.supabase.com:5432/postgres?sslmode=require'
+export DB_POOLED=true DB_SSL=true
+
+alembic upgrade head
+python -m app.seed.seed_companies
+python -m app.services.refresh          # ~5-7 min
 ```
 
-Verify in the Supabase table editor that `companies` has 50 rows.
+Verify in the Supabase table editor that `companies` has 50 rows. (This is a one-time step — the database is already seeded.)
 
 ## Step 3 — GitHub
 
