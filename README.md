@@ -146,6 +146,40 @@ A representative run (hosted fastembed profile) scored **faithfulness ≈ 1.00, 
 
 ---
 
+## Repository layout
+
+```
+equity_prism/
+├─ backend/                     FastAPI service (deployed to Render)
+│  ├─ app/
+│  │  ├─ main.py                app factory + router registration
+│  │  ├─ agents/               LangGraph: router · 5 specialists · synthesizer · snapshot
+│  │  ├─ api/routes/           companies·market·news·screener·chat·documents·
+│  │  │                        indices·watchlist·portfolio·health
+│  │  ├─ core/                 config · database (async pooler) · auth middleware
+│  │  ├─ llm/                  Groq factory (retry + streaming) · LangFuse tracer
+│  │  ├─ rag/                  chunking · fastembed embeddings · hybrid retrieval · ingestion
+│  │  ├─ services/             market_data (yfinance) · news (RSS) · ratios · refresh · screener
+│  │  ├─ models/ · schemas/    SQLAlchemy models · Pydantic schemas
+│  │  ├─ seed/                 Nifty 50 list + company seeder
+│  │  └─ eval/                 self-contained RAGAS-style RAG eval
+│  ├─ alembic/                 migrations (enables pgvector)
+│  ├─ Dockerfile.light         lightweight image used in production (no torch)
+│  ├─ requirements.txt         full local deps
+│  └─ requirements-hosted.txt  slim hosted deps (fastembed, no torch)
+├─ frontend/                    Next.js 15 app (deployed to Vercel)
+│  └─ src/
+│     ├─ app/                  9 routes: dashboard·company·chat·compare·portfolio·
+│     │                        documents·screener·news·settings
+│     ├─ components/           UI (charts, tables, agent badges, gate)
+│     └─ lib/                  API client + access-key handling
+├─ render.yaml                 Render blueprint (backend service)
+├─ README.md · DEPLOY.md · USER_GUIDE.md · LINKS.md
+└─ LICENSE
+```
+
+---
+
 ## License
 
 MIT — see [LICENSE](./LICENSE).
