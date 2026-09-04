@@ -1,7 +1,16 @@
+"""
+Component: Backend -> AI Orchestration Layer -> Specialist agent (LangGraph node)
+Belongs to: one of the five parallel specialists dispatched by the router.
+Purpose: reads the recent news headlines already fetched into the snapshot and judges
+sentiment (Positive/Neutral/Negative/Mixed) per symbol — never invents events or prices,
+only reasons over the supplied headline titles/sources.
+"""
+
 import json
 
 from app.llm.factory import complete
 
+# System prompt: restricts the model to judging sentiment from the supplied headlines only.
 SYS = (
     "You are a market-sentiment analyst. You are given recent news headlines for one or more Indian "
     "listed companies. Judge sentiment ONLY from the supplied headlines; do not invent events or prices. "
@@ -12,6 +21,9 @@ SYS = (
 )
 
 
+# LangGraph node entry point. Builds a per-symbol headline payload from the snapshot's
+# already-fetched news, also collects up to 3 headline links per symbol as citations.
+# No-ops if none of the resolved symbols have any news attached.
 async def run(state: dict, config: dict | None = None) -> dict:
     tracer = (config or {}).get("configurable", {}).get("tracer")
     symbols = state.get("symbols", [])

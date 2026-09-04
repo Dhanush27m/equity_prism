@@ -1,3 +1,8 @@
+# Component: Backend -> Dependencies -> Hosted/free-tier profile
+# Belongs to: installed by backend/Dockerfile.light — the image actually deployed to Render.
+# Purpose: identical to requirements.txt except sentence-transformers (PyTorch) is
+# replaced with fastembed (ONNX Runtime, no torch) — the single dependency swap behind
+# the ~85% smaller Docker image that makes free-tier hosting of the RAG feature feasible.
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 pydantic==2.10.5

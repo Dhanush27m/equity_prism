@@ -1,3 +1,11 @@
+"""
+Component: Backend -> API Layer -> Market data & fundamentals
+Belongs to: the Company page — price chart, statements, ratios, risk signals.
+Purpose: exposes per-symbol history/fundamentals/statements (always live yfinance) and
+ratios/risk (stored-first: read the DB row seeded by services/refresh.py, only falling
+back to a live yfinance computation if no stored row exists yet).
+"""
+
 import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -15,6 +23,7 @@ VALID_KINDS = {"income", "balance", "cashflow"}
 VALID_PERIODS = {"1M", "3M", "6M", "1Y", "5Y", "MAX"}
 
 
+# Live OHLCV candles for the price chart, over a validated period/interval.
 @router.get("/{symbol}/history")
 async def history(
     symbol: str,
@@ -30,6 +39,7 @@ async def history(
     return {"symbol": symbol.upper(), "period": period, "interval": interval, "candles": candles}
 
 
+# Live company profile/fundamentals snapshot from yfinance.
 @router.get("/{symbol}/fundamentals")
 async def fundamentals(symbol: str) -> dict:
     data = await asyncio.to_thread(get_fundamentals, symbol.upper())
@@ -38,6 +48,7 @@ async def fundamentals(symbol: str) -> dict:
     return data
 
 
+# Live income/balance/cashflow statement, annual or quarterly.
 @router.get("/{symbol}/statements/{kind}")
 async def statements(
     symbol: str,
@@ -49,6 +60,8 @@ async def statements(
     return await asyncio.to_thread(get_statement, symbol.upper(), kind, period_type)
 
 
+# Key ratios (P/E, P/B, ROE, etc.) — reads the stored FinancialMetric row first (seeded
+# by services/refresh.py's batch job); only computes live from yfinance if nothing is stored.
 @router.get("/{symbol}/ratios")
 async def ratios(symbol: str, db: AsyncSession = Depends(get_db)) -> dict:
     symbol = symbol.upper()
@@ -67,6 +80,7 @@ async def ratios(symbol: str, db: AsyncSession = Depends(get_db)) -> dict:
     return metrics
 
 
+# Rule-based risk flags + score — same stored-first, live-fallback pattern as ratios above.
 @router.get("/{symbol}/risk")
 async def risk(symbol: str, db: AsyncSession = Depends(get_db)) -> dict:
     symbol = symbol.upper()

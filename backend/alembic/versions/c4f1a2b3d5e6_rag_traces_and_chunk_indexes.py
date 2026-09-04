@@ -4,6 +4,11 @@ Revision ID: c4f1a2b3d5e6
 Revises: 002e0f3c7c67
 Create Date: 2026-07-26 09:00:00.000000
 
+Component: Backend -> Data Layer -> Alembic migration (third/current in the chain)
+Purpose: adds rag_traces (the RAG question/answer audit table written by
+document_research.py and rag_eval.py) and the two indexes hybrid retrieval depends on —
+an HNSW cosine index for pgvector's vector_search and a GIN full-text index for
+fulltext_search (see app/rag/retrieval.py).
 """
 from typing import Sequence, Union
 

@@ -1,3 +1,11 @@
+/**
+ * Component: Frontend -> components/ui -> Input/Select primitives
+ * Belongs to: the base UI kit (src/components/ui) — used in forms across the Portfolio,
+ * Screener, and Chat pages.
+ * Purpose: styled wrappers around the native <input>/<select> elements matching the
+ * app's design tokens.
+ */
+
 import * as React from "react";
 
 import { cn } from "@/lib/utils";

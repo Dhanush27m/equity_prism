@@ -1,3 +1,12 @@
+/**
+ * Component: Frontend -> components -> Small shared display primitives
+ * Belongs to: reused across the Dashboard, Company, Compare, Portfolio, and Watchlist
+ * views wherever a signed value, metric tile, or risk/sentiment badge needs to render
+ * consistently.
+ * Purpose: a handful of tiny presentational helpers so every page renders a "+2.3%"
+ * change indicator, a labeled metric card, or a risk/sentiment badge the same way.
+ */
+
 "use client";
 
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
@@ -5,6 +14,8 @@ import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { cn, formatPct, signClass } from "@/lib/utils";
 
+// A signed value/percentage with an up/down arrow and green/red/neutral color, matching
+// the backend's decimal-vs-percentage ratio convention via the `isDecimal` flag.
 export function Delta({
   value,
   pct,
@@ -29,6 +40,8 @@ export function Delta({
   );
 }
 
+// A small labeled stat tile (label + value + optional hint) used throughout the
+// Dashboard/Company/Portfolio summary rows.
 export function MetricCard({
   label,
   value,
@@ -47,6 +60,8 @@ export function MetricCard({
   );
 }
 
+// Maps a backend risk score (see services/ratios.py's compute_risk) to a Badge
+// variant/label for display.
 export function riskBadgeVariant(score: number | null | undefined) {
   if (score == null) return { variant: "neutral" as const, label: "No data" };
   if (score >= 5) return { variant: "negative" as const, label: "High risk" };
@@ -54,6 +69,8 @@ export function riskBadgeVariant(score: number | null | undefined) {
   return { variant: "positive" as const, label: "Low risk" };
 }
 
+// Maps a free-text sentiment label (from the sentiment specialist agent's answer) to a
+// Badge variant by loose keyword match.
 export function sentimentVariant(label: string | null | undefined) {
   const l = (label ?? "").toLowerCase();
   if (l.includes("bull") || l.includes("positive")) return "positive" as const;

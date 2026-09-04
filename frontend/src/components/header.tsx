@@ -1,3 +1,11 @@
+/**
+ * Component: Frontend -> components -> Top bar
+ * Belongs to: rendered by app-shell.tsx on every page.
+ * Purpose: the sticky top bar — a debounced stock search-and-navigate box (backed by
+ * GET /api/companies?search=) and the light/dark theme toggle. On mobile also renders
+ * the hamburger button that opens the slide-over sidebar.
+ */
+
 "use client";
 
 import { Menu, Moon, Search, Sun } from "lucide-react";
@@ -9,6 +17,10 @@ import { Button } from "@/components/ui/button";
 import { useCompanies } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 
+// Debounced (200ms) autocomplete search box: as the user types, queries
+// GET /api/companies?search=..., shows up to 8 matches in a dropdown navigable by
+// arrow keys/Enter, and navigates to the Company page on selection. Closes on
+// outside-click via a document-level mousedown listener.
 function StockSearch() {
   const router = useRouter();
   const [q, setQ] = React.useState("");

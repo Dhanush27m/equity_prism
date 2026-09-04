@@ -1,3 +1,11 @@
+"""
+Component: Backend -> AI Orchestration Layer -> Specialist agent (LangGraph node)
+Belongs to: one of the five parallel specialists dispatched by the router; the only one
+that talks to the RAG subsystem (app/rag/*).
+Purpose: answers questions from the user's uploaded PDF documents using hybrid retrieval
+(app/rag/pipeline.py), with mandatory inline [n] citations back to the retrieved passages.
+"""
+
 from sqlalchemy import select
 
 from app.core.database import AsyncSessionLocal
@@ -5,6 +13,9 @@ from app.llm.factory import complete
 from app.models import RagTrace, User
 from app.rag import pipeline
 
+# System prompt: restricts the model to the retrieved excerpts only, requires inline
+# [n] citation markers, and explicitly instructs it to say so rather than guess when the
+# excerpts don't contain the answer.
 SYS = (
     "You are a document research analyst answering questions over a user's uploaded financial "
     "documents (annual reports, filings, research notes). You are given numbered excerpts retrieved "
@@ -15,6 +26,8 @@ SYS = (
 )
 
 
+# Best-effort persistence of a RAG evaluation trace row (question/answer/chunks/citations)
+# for later inspection — failures here are swallowed so a logging issue never breaks chat.
 async def _persist_trace(question, answer, chunk_ids, citations, res, tracer) -> None:
     try:
         async with AsyncSessionLocal() as session:
@@ -34,6 +47,9 @@ async def _persist_trace(question, answer, chunk_ids, citations, res, tracer) ->
         pass
 
 
+# LangGraph node entry point. Runs the hybrid RAG pipeline for the question, short-
+# circuits with a fixed "nothing found" fragment (no LLM call) if retrieval returns zero
+# chunks, otherwise generates a cited answer and persists an evaluation trace of it.
 async def run(state: dict, config: dict | None = None) -> dict:
     tracer = (config or {}).get("configurable", {}).get("tracer")
     question = state["question"]

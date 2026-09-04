@@ -1,3 +1,10 @@
+# Component: Deployment -> Render Blueprint
+# Belongs to: read by Render when the repo is connected via "New + -> Blueprint" (see
+# DEPLOY.md Step 4) — defines the backend's hosted deployment declaratively.
+# Purpose: builds the lightweight image (Dockerfile.light) on Render's free tier,
+# wires the secret env vars (DB URLs, Groq key, access key) as prompted-not-committed
+# values, and hardcodes the rest of the "hosted profile" switches (DB_POOLED/DB_SSL
+# for the Supabase pooler, open CORS, migrations off by default).
 services:
   - type: web
     name: equity-prism-api

@@ -1,3 +1,13 @@
+/**
+ * Component: Frontend -> app -> News page (route "/news")
+ * Belongs to: the News & Sentiment screen.
+ * Purpose: shows recent headlines for a chosen symbol (GET /api/news/{symbol}) with a
+ * quick sentiment gauge. Note: the sentiment classification here is a simple client-side
+ * keyword match (POSITIVE/NEGATIVE word lists below) — a fast, free, local heuristic for
+ * the gauge, entirely separate from the backend's LLM-based sentiment specialist agent,
+ * which the "Deep sentiment via AI" button links out to for a real analysis.
+ */
+
 "use client";
 
 import { ExternalLink, Newspaper, Sparkles } from "lucide-react";
@@ -25,6 +35,7 @@ const NEGATIVE = [
 
 type Sentiment = "bullish" | "bearish" | "neutral";
 
+// Client-side keyword-count classifier for one headline — purely local, no API call.
 function classify(title: string): Sentiment {
   const t = title.toLowerCase();
   let score = 0;
@@ -35,6 +46,8 @@ function classify(title: string): Sentiment {
   return "neutral";
 }
 
+// A horizontal bearish<->bullish gauge with a marker positioned by net sentiment ratio
+// across the currently-loaded headlines.
 function Gauge({ bullish, bearish, neutral }: { bullish: number; bearish: number; neutral: number }) {
   const total = bullish + bearish + neutral || 1;
   const net = (bullish - bearish) / total;

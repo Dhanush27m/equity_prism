@@ -1,7 +1,19 @@
+"""
+Component: Backend -> Services -> Ratio & risk computation
+Belongs to: called from api/routes/market.py (live fallback) and services/refresh.py
+(the batch job that populates the stored FinancialMetric/RiskSignal tables).
+Purpose: computes the standard valuation/profitability/leverage ratios from yfinance
+fundamentals + statements (falling back to deriving a ratio from raw statement line
+items when yfinance doesn't supply it directly), then applies simple rule-based
+thresholds to produce a risk score and flag list.
+"""
+
 from typing import Any
 
 from app.services.market_data import get_fundamentals, get_statement
 
+# The canonical list of ratio fields — mirrors FinancialMetric's columns exactly, and is
+# what api/routes/market.py reads back out of that table.
 METRIC_FIELDS = [
     "pe", "forward_pe", "pb", "ps", "roe", "roa", "roce", "debt_to_equity",
     "current_ratio", "quick_ratio", "gross_margin", "operating_margin", "net_margin",
@@ -9,6 +21,8 @@ METRIC_FIELDS = [
 ]
 
 
+# Finds the most recent (first) non-null value for a line item across a statement's
+# rows, trying multiple possible yfinance label variants for the same concept.
 def _latest(stmt: dict, *names: str) -> float | None:
     rows = stmt.get("rows", {})
     for name in names:
@@ -20,6 +34,9 @@ def _latest(stmt: dict, *names: str) -> float | None:
     return None
 
 
+# Derives ROE/ROA/ROCE/current-ratio/FCF from raw income/balance/cashflow statement line
+# items — used as a fallback wherever yfinance's own summary fundamentals don't provide
+# the ratio directly (compute_metrics below prefers the direct yfinance value when present).
 def _derived(symbol: str) -> dict[str, float | None]:
     income = get_statement(symbol, "income", "annual")
     balance = get_statement(symbol, "balance", "annual")
@@ -61,6 +78,9 @@ def _derived(symbol: str) -> dict[str, float | None]:
     }
 
 
+# Main entry point: combines yfinance's direct fundamentals with the statement-derived
+# fallbacks above into the full METRIC_FIELDS set. This is what gets stored into
+# FinancialMetric (via services/refresh.py) and what agents' prompts see as "metrics".
 def compute_metrics(symbol: str) -> dict[str, Any]:
     f = get_fundamentals(symbol)
     d = _derived(symbol)
@@ -91,6 +111,10 @@ def compute_metrics(symbol: str) -> dict[str, Any]:
     }
 
 
+# Rule-based (not ML) risk scoring: checks a fixed set of threshold conditions
+# (leverage, liquidity, margins, growth, cash flow) against the computed metrics and
+# flags each one that fires, with a severity. The overall score is a simple weighted
+# count of flags — fully explainable, no training data required.
 def compute_risk(metrics: dict[str, Any]) -> dict[str, Any]:
     signals: list[dict[str, str]] = []
 

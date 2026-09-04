@@ -1,3 +1,12 @@
+"""
+Component: Backend -> Data Layer -> ORM model
+Belongs to: the Portfolio page and the portfolio specialist agent — both read/write this
+table via api/routes/portfolio.py.
+Purpose: one row per holding (symbol/quantity/avg_price) for the local user. P&L and
+current value are never stored here — they're always computed fresh from
+Company.current_price at read time (see api/routes/portfolio.py's _build()).
+"""
+
 from datetime import datetime
 
 from sqlalchemy import DateTime, Float, ForeignKey, String, func

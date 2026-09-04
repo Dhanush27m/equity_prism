@@ -1,3 +1,13 @@
+/**
+ * Component: Frontend -> lib -> Chat send/stream orchestration hook
+ * Belongs to: used by the Prism Chat page (app/chat/page.tsx) and any "Ask AI" button
+ * elsewhere that jumps into chat.
+ * Purpose: the client-side counterpart to the backend's SSE pipeline — sends a
+ * question, creates the user + placeholder assistant messages in the chat store, and
+ * updates that assistant message live as status/plan/token/done SSE events arrive from
+ * lib/api.ts's streamChat.
+ */
+
 "use client";
 
 import * as React from "react";
@@ -11,6 +21,12 @@ export function useChat() {
   const [busy, setBusy] = React.useState(false);
   const [status, setStatus] = React.useState<string | null>(null);
 
+  // Sends a question: ensures a thread exists (creating one if needed), titles a fresh
+  // thread from the first question, appends the user message and a streaming placeholder
+  // assistant message, then consumes the SSE stream — appending each token to the
+  // placeholder's content and, on the final "done" event, attaching citations/agents and
+  // clearing the streaming flag. On any failure, marks the message as an error instead
+  // of leaving it stuck mid-stream.
   const send = React.useCallback(
     async (question: string, existingThreadId?: string) => {
       if (!question.trim() || busy) return;

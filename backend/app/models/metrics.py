@@ -1,3 +1,12 @@
+"""
+Component: Backend -> Data Layer -> ORM model
+Belongs to: the "stored-first" data api/routes/market.py's /ratios and /risk endpoints
+read, and what app/agents/snapshot.py pulls into every specialist agent's grounded context.
+Purpose: FinancialMetric holds one pre-computed ratio snapshot per company (seeded by
+services/refresh.py's batch job); RiskSignal holds the rule-based risk score + flags
+computed from those same ratios (services/ratios.py's compute_risk).
+"""
+
 from datetime import datetime
 
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, func
@@ -7,6 +16,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base
 
 
+# One row per company (unique on company_id). Field list mirrors services/ratios.py's
+# METRIC_FIELDS exactly, so the two stay in sync. Ratio fields are decimals (0.15 = 15%)
+# except debt_to_equity, which is already a percentage — the same convention every agent
+# system prompt has to spell out.
 class FinancialMetric(Base):
     __tablename__ = "financial_metrics"
 
@@ -38,6 +51,8 @@ class FinancialMetric(Base):
     )
 
 
+# One row per company (unique on company_id): an overall risk score plus a JSON list of
+# the specific rule-based flags that produced it (e.g. high leverage, weak margins).
 class RiskSignal(Base):
     __tablename__ = "risk_signals"
 

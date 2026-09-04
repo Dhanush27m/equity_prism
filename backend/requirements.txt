@@ -1,3 +1,9 @@
+# Component: Backend -> Dependencies -> Local/self-hosted profile
+# Belongs to: installed by backend/Dockerfile (and local `pip install -r`) for the
+# "heavy" local-development environment.
+# Purpose: the full dependency set including sentence-transformers (PyTorch-based
+# embeddings/reranking) — the counterpart to requirements-hosted.txt, which swaps
+# sentence-transformers for the much lighter fastembed for the free-tier deployment.
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 pydantic==2.10.5

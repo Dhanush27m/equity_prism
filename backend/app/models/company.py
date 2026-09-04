@@ -1,3 +1,11 @@
+"""
+Component: Backend -> Data Layer -> ORM model
+Belongs to: the core reference table every other model/route joins against (via symbol
+or company_id) — seeded once by app/seed/seed_companies.py.
+Purpose: one row per tracked Nifty 50 company: identity (symbol/name/sector/industry)
+and the last-refreshed current_price/market_cap (kept warm by services/refresh.py).
+"""
+
 from sqlalchemy import BigInteger, Float, String
 from sqlalchemy.orm import Mapped, mapped_column
 

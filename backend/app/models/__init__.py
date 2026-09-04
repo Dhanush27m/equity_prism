@@ -1,3 +1,10 @@
+# Component: Backend -> Data Layer -> ORM model package
+# Belongs to: every module that does `from app.models import X` instead of reaching into
+# individual model files.
+# Purpose: re-exports every SQLAlchemy model class from one place, and — just as
+# importantly — ensures every model module is imported (and therefore registered on
+# Base.metadata) before Alembic autogenerate or `Base.metadata.create_all` run.
+
 from app.models.base import Base
 from app.models.company import Company
 from app.models.document import Document, DocumentChunk

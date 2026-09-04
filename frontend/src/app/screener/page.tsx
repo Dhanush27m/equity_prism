@@ -1,3 +1,12 @@
+/**
+ * Component: Frontend -> app -> Screener page (route "/screener")
+ * Belongs to: filters the seeded Nifty 50 universe by fundamentals.
+ * Purpose: a filter form (sector/market cap/P-E/ROE/dividend yield) plus a sortable
+ * results table (backed entirely by stored data via GET /api/screener — no live
+ * yfinance calls per row), with click-through to the Company page and a one-click
+ * "add to watchlist" star per row.
+ */
+
 "use client";
 
 import { ArrowDown, ArrowUp, Filter, Star } from "lucide-react";
@@ -13,6 +22,8 @@ import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { useAddWatchlist, useCompanies, useScreener, type ScreenerFilters } from "@/lib/hooks";
 import { cn, formatCr, formatNumber, formatPct, formatPrice } from "@/lib/utils";
 
+// Local (string, form-friendly) shape of the filter inputs — converted to the API's
+// numeric ScreenerFilters shape (crores -> rupees, percent -> decimal) only once Apply is clicked.
 interface FormState {
   sector: string;
   market_cap_min_cr: string;
@@ -40,11 +51,15 @@ export default function ScreenerPage() {
   const router = useRouter();
   const addWatch = useAddWatchlist();
   const { data: companies } = useCompanies({});
+  // Sector dropdown options derived from whatever sectors actually exist in the seeded
+  // companies, rather than a hardcoded list.
   const sectors = React.useMemo(
     () => Array.from(new Set((companies ?? []).map((c) => c.sector).filter(Boolean))).sort() as string[],
     [companies]
   );
 
+  // `form` is what the inputs are bound to; `applied` is what's actually sent to the
+  // API — separated so editing the filter fields doesn't refetch until "Apply" is clicked.
   const [form, setForm] = React.useState<FormState>(EMPTY);
   const [applied, setApplied] = React.useState<FormState>(EMPTY);
   const [sort, setSort] = React.useState<{ by: string; desc: boolean }>({ by: "market_cap", desc: true });
@@ -62,6 +77,8 @@ export default function ScreenerPage() {
 
   const { data, isLoading, isError, refetch } = useScreener(filters);
 
+  // Clicking an already-active sortable column flips direction; clicking a new one
+  // sorts descending by default.
   function toggleSort(col: string) {
     setSort((s) => (s.by === col ? { by: col, desc: !s.desc } : { by: col, desc: true }));
   }

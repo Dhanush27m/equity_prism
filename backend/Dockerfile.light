@@ -1,3 +1,11 @@
+# Component: Backend -> Deployment -> Lightweight production image
+# Belongs to: the image actually deployed to Render (declared in render.yaml) — this is
+# the concrete artifact behind the "~85% smaller image" hosted-profile story.
+# Purpose: builds a torch-free backend image — installs requirements-hosted.txt (no
+# sentence-transformers/torch) and bakes in the env vars that switch the app into its
+# hosted profile at the image level (fastembed embeddings, reranker off, in-memory
+# cache, background-task ingestion, /tmp-based writable dirs for Render's read-only
+# filesystem elsewhere).
 FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \

@@ -1,5 +1,17 @@
+"""
+Component: Backend -> Evaluation -> Synthetic test fixture
+Belongs to: app/eval/rag_eval.py's evaluate() — seeded as a fake "uploaded document" so
+the RAG pipeline can be evaluated end-to-end without depending on a real user's PDF.
+Purpose: a fabricated 5-page annual report (Meridian Industries, a fictional company)
+with concrete, checkable numbers, plus a matching set of questions whose answers can
+only come from those numbers — used to score faithfulness/relevancy/precision.
+"""
+
 EVAL_FILENAME = "meridian_industries_annual_report_fy2024.pdf"
 
+# Five synthetic "pages" of financial report text, deliberately written with precise,
+# verifiable figures (revenue, margins, ratios, guidance) so the LLM-judge evaluation in
+# rag_eval.py can check whether generated answers are actually faithful to this content.
 PAGES: list[tuple[int, str]] = [
     (
         1,
@@ -59,6 +71,8 @@ PAGES: list[tuple[int, str]] = [
     ),
 ]
 
+# Questions whose correct answers require pulling specific numbers from the pages above —
+# used to drive faithfulness/relevancy/context-precision scoring in rag_eval.py.
 QUESTIONS: list[str] = [
     "What was Meridian Industries' consolidated revenue in FY2024 and how much did it grow?",
     "What was the debt to equity ratio and net debt to EBITDA at the end of FY2024?",

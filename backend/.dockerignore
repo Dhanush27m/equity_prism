@@ -1,3 +1,7 @@
+# Component: Backend -> Deployment -> Docker build exclusions
+# Belongs to: read by `docker build` for both backend/Dockerfile and Dockerfile.light.
+# Purpose: keeps caches, virtualenvs, secrets (.env), and local uploads out of the built
+# image — smaller, faster builds and no accidental secret baked into a layer.
 __pycache__/
 *.py[cod]
 .venv/

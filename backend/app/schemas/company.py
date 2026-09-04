@@ -1,3 +1,12 @@
+"""
+Component: Backend -> API Layer -> Pydantic schema
+Belongs to: the response_model for GET /api/companies and GET /api/companies/{symbol}
+(app/api/routes/companies.py).
+Purpose: the public JSON shape of a Company row — decouples the API's response
+contract from the ORM model (via from_attributes) so DB columns can change without
+automatically changing the API surface.
+"""
+
 from pydantic import BaseModel, ConfigDict
 
 

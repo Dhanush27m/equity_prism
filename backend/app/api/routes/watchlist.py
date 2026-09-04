@@ -1,3 +1,10 @@
+"""
+Component: Backend -> API Layer -> Watchlist
+Belongs to: the Dashboard's watchlist card and the Company/Screener pages' "watch" star.
+Purpose: CRUD for the local user's tracked-symbols list, enriched with each symbol's
+current price/market cap/P-E/ROE/risk score from stored data for display.
+"""
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -14,6 +21,8 @@ class WatchlistAdd(BaseModel):
     symbol: str = Field(min_length=1, max_length=32)
 
 
+# Lists the local user's watchlist, joining in each symbol's company/metric/risk data
+# for the summary card shown on the dashboard.
 @router.get("")
 async def list_watchlist(db: AsyncSession = Depends(get_db)) -> dict:
     user = await get_local_user(db)
@@ -52,6 +61,8 @@ async def list_watchlist(db: AsyncSession = Depends(get_db)) -> dict:
     return {"items": out}
 
 
+# Adds a symbol to the watchlist; idempotent — returns status="exists" instead of
+# creating a duplicate row if it's already there.
 @router.post("", status_code=201)
 async def add_watchlist(payload: WatchlistAdd, db: AsyncSession = Depends(get_db)) -> dict:
     user = await get_local_user(db)
@@ -73,6 +84,7 @@ async def add_watchlist(payload: WatchlistAdd, db: AsyncSession = Depends(get_db
     return {"id": item.id, "symbol": symbol, "status": "added"}
 
 
+# Removes a symbol from the watchlist.
 @router.delete("/{symbol}", status_code=204)
 async def remove_watchlist(symbol: str, db: AsyncSession = Depends(get_db)) -> None:
     user = await get_local_user(db)

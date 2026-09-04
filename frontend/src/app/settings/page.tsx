@@ -1,3 +1,12 @@
+/**
+ * Component: Frontend -> app -> Settings page (route "/settings")
+ * Belongs to: linked from the sidebar footer.
+ * Purpose: shows backend liveness (via GET /api/health), a theme toggle, and a link to
+ * LangFuse for agent tracing. Note: the "API base" row and the LangFuse link below are
+ * hardcoded to localhost — display-only holdovers from local development, not wired to
+ * NEXT_PUBLIC_API_BASE/NEXT_PUBLIC_TRACES_URL like the rest of the app is.
+ */
+
 "use client";
 
 import { Activity, ExternalLink, Moon, Server, Sun } from "lucide-react";
@@ -7,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useHealth } from "@/lib/hooks";
 
+// A simple label/value row used throughout this page's info cards.
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between border-b border-border py-2 text-sm last:border-0">

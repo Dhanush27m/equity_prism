@@ -1,3 +1,14 @@
+"""
+Component: Backend -> Services -> External data (yfinance)
+Belongs to: called from api/routes/market.py (live endpoints) and services/ratios.py
+(fundamentals feeding ratio computation).
+Purpose: every yfinance call in the project goes through here. Handles the NSE (.NS) /
+BSE (.BO) suffix resolution, cleans NaN/Inf/Timestamp values into JSON-safe types, and
+caches results (via services/yf_session.py) to reduce load on yfinance's rate limits.
+Every function degrades to empty/null on failure rather than raising — a throttled or
+delisted symbol never 500s the API.
+"""
+
 import math
 from typing import Any
 
@@ -15,6 +26,7 @@ INDEX_TTL = 300
 
 PERIOD_MAP = {"1M": "1mo", "3M": "3mo", "6M": "6mo", "1Y": "1y", "5Y": "5y", "MAX": "max"}
 
+# The four indices shown on the dashboard.
 INDICES = [
     {"key": "NIFTY50", "name": "NIFTY 50", "ticker": "^NSEI"},
     {"key": "SENSEX", "name": "SENSEX", "ticker": "^BSESN"},
@@ -23,6 +35,8 @@ INDICES = [
 ]
 
 
+# Normalizes a raw yfinance/pandas value into something JSON-serializable: NaN/Inf -> None,
+# pandas Timestamp -> ISO date string, everything else passed through unchanged.
 def _clean(value: Any) -> Any:
     if value is None:
         return None
@@ -37,6 +51,9 @@ def _ticker(symbol: str, suffix: str) -> yf.Ticker:
     return yf.Ticker(f"{symbol}{suffix}")
 
 
+# Resolves which exchange suffix (.NS or .BO) actually has data for a symbol, trying NSE
+# first. Returns ({}, None) if neither suffix returns usable data (e.g. a delisted/
+# renamed ticker like LTIM/TATAMOTORS).
 def resolve_info(symbol: str) -> tuple[dict, str | None]:
     for suffix in SUFFIXES:
         try:
@@ -48,6 +65,9 @@ def resolve_info(symbol: str) -> tuple[dict, str | None]:
     return {}, None
 
 
+# Live company profile/fundamentals (name, sector, price, valuation/profitability
+# fields). Cached for INFO_TTL seconds; a resolved (non-null suffix) result is what gets
+# cached — an unresolved symbol is retried on the next call rather than caching the miss.
 def get_fundamentals(symbol: str) -> dict:
     key = f"fund:{symbol}"
     cached = cache_get(key)
@@ -71,6 +91,7 @@ def get_fundamentals(symbol: str) -> dict:
     return out
 
 
+# OHLCV candles for the price chart over a period/interval, cached for HISTORY_TTL seconds.
 def get_history(symbol: str, period: str = "1Y", interval: str = "1d") -> list[dict]:
     yf_period = PERIOD_MAP.get(period.upper(), "1y")
     key = f"hist:{symbol}:{yf_period}:{interval}"
@@ -104,6 +125,8 @@ def get_history(symbol: str, period: str = "1Y", interval: str = "1d") -> list[d
     return candles
 
 
+# One index's current value/change/change_pct, derived from the last 5 daily closes
+# (so "previous close" is available even right after market open).
 def _index_quote(ticker: str) -> dict:
     df = pd.DataFrame()
     try:
@@ -126,6 +149,7 @@ def _index_quote(ticker: str) -> dict:
     }
 
 
+# All four tracked indices' current quotes, cached for INDEX_TTL (5 min) seconds.
 def get_indices() -> list[dict]:
     key = "indices:in"
     cached = cache_get(key)
@@ -140,6 +164,8 @@ def get_indices() -> list[dict]:
     return out
 
 
+# Fetches the raw pandas DataFrame for one statement type/period from yfinance,
+# resolving the NSE/BSE suffix the same way as the other functions.
 def _statement_df(symbol: str, kind: str, period_type: str) -> pd.DataFrame:
     quarterly = period_type == "quarterly"
     attr = {
@@ -160,6 +186,9 @@ def _statement_df(symbol: str, kind: str, period_type: str) -> pd.DataFrame:
     return pd.DataFrame()
 
 
+# One financial statement (income/balance/cashflow, annual/quarterly), reshaped from a
+# pandas DataFrame into a {periods: [...], rows: {line_item: [values]}} JSON shape.
+# Cached for STATEMENT_TTL (12h) seconds; returns an empty-but-valid shape on failure.
 def get_statement(symbol: str, kind: str, period_type: str = "annual") -> dict:
     key = f"stmt:{symbol}:{kind}:{period_type}"
     cached = cache_get(key)

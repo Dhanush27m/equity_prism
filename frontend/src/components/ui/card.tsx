@@ -1,3 +1,11 @@
+/**
+ * Component: Frontend -> components/ui -> Card primitive
+ * Belongs to: the base UI kit (src/components/ui) — the standard bordered container
+ * used for metric tiles, chat messages, and section panels throughout the app.
+ * Purpose: a composable Card + CardHeader/Title/Description/Content/Footer set, mirroring
+ * the common shadcn-style card composition pattern.
+ */
+
 import * as React from "react";
 
 import { cn } from "@/lib/utils";

@@ -1,3 +1,14 @@
+/**
+ * Component: Frontend -> app -> Prism Chat page (route "/chat")
+ * Belongs to: the primary UI for the multi-agent chatbot — consumes lib/use-chat.ts and
+ * lib/store.ts, and renders each assistant message with agent badges (from the
+ * router's plan), streamed markdown, and expandable citations.
+ * Purpose: a ChatGPT-style thread UI — a sidebar of past threads, a message list that
+ * grows as SSE tokens arrive, starter suggestions on a fresh chat, and support for
+ * arriving with a pre-filled question via ?q= (used by the Dashboard's quick-ask box
+ * and other pages' "Ask AI" buttons).
+ */
+
 "use client";
 
 import { MessageSquarePlus, Plus, Send, Sparkles, Trash2 } from "lucide-react";
@@ -12,6 +23,7 @@ import { useChatStore } from "@/lib/store";
 import { useChat } from "@/lib/use-chat";
 import { cn } from "@/lib/utils";
 
+// Shown as clickable starter prompts on a fresh, empty chat.
 const SUGGESTIONS = [
   "Analyze Reliance Industries as an investment",
   "Compare TCS and Infosys on profitability and valuation",
@@ -19,6 +31,7 @@ const SUGGESTIONS = [
   "Review my portfolio and flag concentration risk",
 ];
 
+// Wrapped in Suspense below because useSearchParams() requires it under the App Router.
 function ChatInner() {
   const params = useSearchParams();
   const { send, busy, status } = useChat();
@@ -35,6 +48,8 @@ function ChatInner() {
   const current = threads.find((t) => t.id === currentId) ?? null;
   const messages = current?.messages ?? [];
 
+  // Auto-sends a question arriving via ?q= (from the Dashboard's quick-ask or an "Ask
+  // AI" button elsewhere) exactly once per page load.
   React.useEffect(() => {
     const q = params.get("q");
     if (q && !sentInitial.current) {
@@ -43,6 +58,7 @@ function ChatInner() {
     }
   }, [params, send]);
 
+  // Keeps the message list scrolled to the bottom as new content streams in.
   React.useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
@@ -130,6 +146,7 @@ function ChatInner() {
                     <div className="text-sm">{m.content}</div>
                   ) : (
                     <>
+                      {/* Agent badges: which specialists the router selected for this turn. */}
                       {m.plan?.agents?.length ? (
                         <div className="mb-2 flex flex-wrap gap-1">
                           {m.plan.agents.map((a) => (

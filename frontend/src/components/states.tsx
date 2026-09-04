@@ -1,9 +1,19 @@
+/**
+ * Component: Frontend -> components -> Generic page-state placeholders
+ * Belongs to: reused by every page for its loading/error/empty states, and as each
+ * page's title/subtitle/action-button header.
+ * Purpose: consistent, reusable UI for the three states every data-driven page has to
+ * handle — an error card (with optional retry), an empty-results card, and a standard
+ * page title/subtitle/action row.
+ */
+
 "use client";
 
 import { AlertCircle, Inbox } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
+// Shown when a query fails — an alert icon, message, and optional retry button.
 export function ErrorState({
   message,
   onRetry,
@@ -24,6 +34,7 @@ export function ErrorState({
   );
 }
 
+// Shown when a query succeeds but returns no results.
 export function EmptyState({
   title,
   hint,
@@ -42,6 +53,7 @@ export function EmptyState({
   );
 }
 
+// The standard title/subtitle/action row every page opens with.
 export function PageHeader({
   title,
   subtitle,

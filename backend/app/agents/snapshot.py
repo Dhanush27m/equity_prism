@@ -1,3 +1,12 @@
+"""
+Component: Backend -> AI Orchestration Layer (data grounding)
+Belongs to: runs before the LangGraph graph is invoked (called from app/api/routes/chat.py).
+Purpose: this is the project's core anti-hallucination mechanism — it resolves which
+tracked companies a question mentions and pre-fetches every number/fact any agent could
+need (stored metrics, risk signals, news, portfolio, document availability) into one
+"snapshot" dict. Agents are then instructed to use ONLY this snapshot, never to invent data.
+"""
+
 import asyncio
 import re
 from datetime import datetime, timezone
@@ -9,6 +18,9 @@ from app.models import Company, Document, FinancialMetric, PortfolioHolding, Ris
 from app.services.news import get_news
 from app.services.ratios import METRIC_FIELDS
 
+# Common words in company names that would cause false-positive symbol matches
+# (e.g. "bank" appearing in many different bank names) and so are excluded from
+# the name-token matching in resolve_symbols below.
 GENERIC_TOKENS = {
     "bank", "limited", "india", "indian", "industries", "company", "corporation",
     "services", "enterprises", "power", "steel", "cement", "auto", "life", "insurance",
@@ -19,6 +31,8 @@ GENERIC_TOKENS = {
 MAX_SYMBOLS = 4
 
 
+# Pure token-matching symbol resolver: scans the question text for a company's ticker or
+# a distinctive word from its name (no LLM call — fast, free, and deterministic).
 async def resolve_symbols(db: AsyncSession, question: str) -> list[str]:
     rows = (await db.execute(select(Company.symbol, Company.name))).all()
     q_tokens = set(re.findall(r"[a-z0-9]+", question.lower()))
@@ -38,6 +52,8 @@ async def resolve_symbols(db: AsyncSession, question: str) -> list[str]:
     return ordered[:MAX_SYMBOLS]
 
 
+# Builds the portfolio agent's data: prices every holding of the single local user
+# against each company's stored current_price and computes invested/value/P&L per row.
 async def _portfolio_snapshot(db: AsyncSession) -> dict | None:
     user = (await db.execute(select(User).where(User.username == "local"))).scalar_one_or_none()
     if user is None:
@@ -80,6 +96,10 @@ async def _portfolio_snapshot(db: AsyncSession) -> dict | None:
     }
 
 
+# Main entry point: for each resolved symbol, loads its stored Company/FinancialMetric/
+# RiskSignal rows and up to 5 recent news headlines (all symbols fetched concurrently via
+# asyncio.gather), then attaches portfolio and document-availability context. The
+# returned dict is the single source of truth every specialist agent's prompt is built from.
 async def build_snapshot(db: AsyncSession, symbols: list[str]) -> dict:
     companies: dict[str, dict] = {}
     for sym in symbols:
@@ -132,6 +152,8 @@ async def build_snapshot(db: AsyncSession, symbols: list[str]) -> dict:
     }
 
 
+# Counts the local user's fully-ingested ("ready") documents — used to decide whether the
+# router is allowed to select the document_research agent at all.
 async def _ready_document_count(db: AsyncSession) -> int:
     user = (await db.execute(select(User).where(User.username == "local"))).scalar_one_or_none()
     if user is None:

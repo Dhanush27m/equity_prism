@@ -1,3 +1,11 @@
+"""
+Component: Backend -> API Layer -> Portfolio
+Belongs to: the Portfolio page — holdings, live P&L, sector allocation.
+Purpose: CRUD for the local user's holdings, pricing each against the company's stored
+current_price and computing invested/current-value/P&L and sector-allocation breakdown
+on every read (no separate "portfolio value" cache — always derived fresh from holdings + prices).
+"""
+
 from collections import defaultdict
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -18,6 +26,9 @@ class HoldingAdd(BaseModel):
     avg_price: float = Field(gt=0)
 
 
+# Shared builder used by all three endpoints below: loads every holding, prices it
+# against the company's current_price (falling back to avg_price if no company/price is
+# known), and aggregates per-row P&L plus a sector-allocation breakdown and totals summary.
 async def _build(db: AsyncSession, user_id: int) -> dict:
     holdings = (
         await db.execute(
@@ -66,12 +77,14 @@ async def _build(db: AsyncSession, user_id: int) -> dict:
     return {"holdings": rows, "summary": summary, "sector_allocation": allocation}
 
 
+# Returns the local user's full portfolio view (holdings + summary + sector allocation).
 @router.get("")
 async def get_portfolio(db: AsyncSession = Depends(get_db)) -> dict:
     user = await get_local_user(db)
     return await _build(db, user.id)
 
 
+# Adds one holding and returns the recomputed full portfolio view.
 @router.post("", status_code=201)
 async def add_holding(payload: HoldingAdd, db: AsyncSession = Depends(get_db)) -> dict:
     user = await get_local_user(db)
@@ -89,6 +102,8 @@ async def add_holding(payload: HoldingAdd, db: AsyncSession = Depends(get_db)) -
     return await _build(db, user.id)
 
 
+# Removes one holding (by id, scoped to the local user) and returns the recomputed
+# portfolio view.
 @router.delete("/{holding_id}", status_code=200)
 async def remove_holding(holding_id: int, db: AsyncSession = Depends(get_db)) -> dict:
     user = await get_local_user(db)

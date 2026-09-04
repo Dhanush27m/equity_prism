@@ -1,11 +1,24 @@
+"""
+Component: Backend -> RAG Pipeline -> Query-time retrieval
+Belongs to: called from app/rag/pipeline.py's research() function.
+Purpose: implements hybrid retrieval — a pgvector cosine-similarity search and a
+Postgres full-text search, run independently and merged with Reciprocal Rank Fusion
+(RRF) so results that rank well in either (or both) rise to the top without needing to
+normalize the two searches' incompatible score scales.
+"""
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Document, DocumentChunk
 
+# RRF's rank-damping constant (a common default from the original RRF paper) — larger
+# values reduce the influence of rank differences further down each list.
 RRF_K = 60
 
 
+# Normalizes one retrieved row (regardless of which search produced it) into the shared
+# chunk dict shape both search functions and the pipeline use.
 def _row_to_dict(row) -> dict:
     return {
         "id": row.id,
@@ -16,6 +29,8 @@ def _row_to_dict(row) -> dict:
     }
 
 
+# Semantic search: ranks the current user's ready-document chunks by pgvector cosine
+# distance to the query embedding, closest k first.
 async def vector_search(db: AsyncSession, user_id: int, query_emb: list[float], k: int) -> list[dict]:
     distance = DocumentChunk.embedding.cosine_distance(query_emb)
     stmt = (
@@ -39,6 +54,9 @@ async def vector_search(db: AsyncSession, user_id: int, query_emb: list[float], 
     return [_row_to_dict(r) for r in rows]
 
 
+# Keyword search: ranks the same scope of chunks by Postgres's built-in full-text search
+# (to_tsvector/plainto_tsquery), highest ts_rank first. Catches exact-term matches that a
+# pure vector search can under-rank.
 async def fulltext_search(db: AsyncSession, user_id: int, query: str, k: int) -> list[dict]:
     tsv = func.to_tsvector("english", DocumentChunk.content)
     tsq = func.plainto_tsquery("english", query)
@@ -64,6 +82,9 @@ async def fulltext_search(db: AsyncSession, user_id: int, query: str, k: int) ->
     return [_row_to_dict(r) for r in rows]
 
 
+# Reciprocal Rank Fusion: scores every chunk by summing 1/(RRF_K + rank) across each
+# ranked list it appears in, then sorts by that combined score. A chunk appearing near
+# the top of both lists scores higher than one appearing near the top of only one.
 def rrf_merge(result_lists: list[list[dict]], limit: int) -> list[dict]:
     merged: dict[int, dict] = {}
     scores: dict[int, float] = {}
@@ -79,6 +100,8 @@ def rrf_merge(result_lists: list[list[dict]], limit: int) -> list[dict]:
     return ordered[:limit]
 
 
+# Top-level entry point: runs both searches and merges them via RRF. Called once per
+# document_research question.
 async def hybrid_retrieve(
     db: AsyncSession, user_id: int, query: str, query_emb: list[float], k_each: int, limit: int
 ) -> list[dict]:

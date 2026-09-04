@@ -1,3 +1,12 @@
+"""
+Component: Backend -> Evaluation -> RAG pipeline evaluation harness
+Belongs to: a standalone script (`python -m app.eval.rag_eval`), not called from the API.
+Purpose: a self-built, RAGAS-style evaluation of the RAG pipeline — no external eval
+library dependency. Seeds the synthetic corpus from app/eval/corpus.py as a fake
+document, runs the real hybrid-retrieval pipeline against it, and scores the results on
+three LLM-as-judge metrics: faithfulness, answer relevancy, and context precision.
+"""
+
 import argparse
 import asyncio
 import json
@@ -15,6 +24,8 @@ from app.rag import embeddings, pipeline
 from app.rag.chunking import chunk_pages
 
 
+# Best-effort JSON parsing for LLM-judge responses: strips markdown code fences, then
+# falls back to locating the outermost {...} span if the whole response isn't valid JSON.
 def _parse_json(text: str, fallback):
     text = text.strip()
     if text.startswith("```"):
@@ -34,6 +45,7 @@ def _parse_json(text: str, fallback):
         return fallback
 
 
+# Plain cosine similarity between two embedding vectors (used by answer_relevancy below).
 def _cosine(a: list[float], b: list[float]) -> float:
     dot = sum(x * y for x, y in zip(a, b))
     na = math.sqrt(sum(x * x for x in a))
@@ -43,6 +55,10 @@ def _cosine(a: list[float], b: list[float]) -> float:
     return dot / (na * nb)
 
 
+# Inserts the synthetic corpus (app/eval/corpus.py) as a real, "ready" Document + chunked
+# + embedded DocumentChunk rows for the local user, so the real pipeline.research() can
+# run against it exactly as it would against a real upload. Deletes any prior eval
+# document with the same filename first so re-runs don't accumulate duplicates.
 async def seed_document(session) -> int:
     user = await get_local_user(session)
     await session.execute(
@@ -80,11 +96,14 @@ async def seed_document(session) -> int:
     return document.id
 
 
+# Removes the synthetic eval document (and its chunks, via cascade) once evaluation finishes.
 async def cleanup_document(session, document_id: int) -> None:
     await session.execute(delete(Document).where(Document.id == document_id))
     await session.commit()
 
 
+# Generates an answer the same way the real document_research agent would (same system
+# prompt, same "answer from these excerpts with [n] citations" instruction).
 async def generate_answer(question: str, context: str) -> str:
     messages = [
         {"role": "system", "content": ANSWER_SYS},
@@ -101,6 +120,9 @@ async def generate_answer(question: str, context: str) -> str:
     return res.text
 
 
+# Metric 1 — Faithfulness: an LLM decomposes the generated answer into atomic factual
+# statements, then a second LLM call judges each statement as supported/unsupported by
+# the retrieved context. Score = fraction of statements that are supported.
 async def faithfulness(question: str, answer: str, context: str) -> float:
     extract = [
         {
@@ -141,6 +163,10 @@ async def faithfulness(question: str, answer: str, context: str) -> float:
     return supported / len(statements)
 
 
+# Metric 2 — Answer relevancy: the reverse-generation technique RAGAS itself uses. An
+# LLM generates 3 questions that the answer would fully address; those are embedded and
+# cosine-compared against the original question's embedding. Score = mean similarity —
+# a high score means the answer is actually "about" what was asked, not just plausible text.
 async def answer_relevancy(question: str, answer: str) -> float:
     gen = [
         {
@@ -163,6 +189,9 @@ async def answer_relevancy(question: str, answer: str) -> float:
     return sum(sims) / len(sims)
 
 
+# Metric 3 — Context precision: an LLM judges each retrieved passage as relevant/not to
+# the question, then scores with an average-precision-style formula that rewards
+# relevant passages ranking earlier — measures retrieval quality independent of generation.
 async def context_precision(question: str, chunks: list[dict]) -> float:
     if not chunks:
         return 0.0
@@ -199,6 +228,9 @@ async def context_precision(question: str, chunks: list[dict]) -> float:
     return precision_sum / total_relevant
 
 
+# Top-level driver: seeds the corpus, runs the real pipeline + all three metrics for
+# every question, prints a per-question and summary report, then always cleans up the
+# seeded document (even on failure, via the finally block).
 async def evaluate(questions: list[str]) -> None:
     async with AsyncSessionLocal() as session:
         print(f"Seeding evaluation corpus '{EVAL_FILENAME}' ({len(PAGES)} pages)...")
@@ -251,6 +283,7 @@ async def evaluate(questions: list[str]) -> None:
     print("=" * 60)
 
 
+# CLI entry point: `python -m app.eval.rag_eval [--limit N]`.
 def main() -> None:
     parser = argparse.ArgumentParser(description="RAGAS-style evaluation of the Equity Prism RAG pipeline")
     parser.add_argument("--limit", type=int, default=len(QUESTIONS), help="number of questions to run")

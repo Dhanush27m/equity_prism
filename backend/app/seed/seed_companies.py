@@ -1,3 +1,12 @@
+"""
+Component: Backend -> Data seeding -> one-time script
+Belongs to: run manually (`python -m app.seed.seed_companies`) from a trusted machine
+during initial setup — see DEPLOY.md Step 2. Not called from the API.
+Purpose: fetches basic identity/price data from yfinance for every Nifty 50 symbol and
+upserts it into the companies table, creating the initial 50 rows the whole app is
+seeded from. Also ensures the single "local" user row exists.
+"""
+
 import time
 
 import yfinance as yf
@@ -12,6 +21,9 @@ settings = get_settings()
 engine = create_engine(settings.database_url_sync, future=True)
 
 
+# Fetches one symbol's yfinance .info, trying both NSE (.NS) and BSE (.BO) suffixes with
+# retries — yfinance is rate-limit-prone, so this is deliberately patient (up to 3
+# attempts per suffix with backoff) before giving up and returning empty fields.
 def fetch_info(symbol: str, retries: int = 3) -> dict:
     for suffix in (".NS", ".BO"):
         info: dict = {}
@@ -37,6 +49,7 @@ def fetch_info(symbol: str, retries: int = 3) -> dict:
     }
 
 
+# Creates the single "local" user row if it doesn't already exist.
 def ensure_default_user(session: Session) -> None:
     existing = session.scalar(select(User).where(User.username == "local"))
     if existing is None:
@@ -44,6 +57,7 @@ def ensure_default_user(session: Session) -> None:
         session.commit()
 
 
+# Creates or updates one Company row from fetched yfinance data.
 def upsert_company(session: Session, symbol: str, data: dict) -> str:
     company = session.scalar(select(Company).where(Company.symbol == symbol))
     if company is None:
@@ -62,6 +76,8 @@ def upsert_company(session: Session, symbol: str, data: dict) -> str:
     return action
 
 
+# Entry point: seeds the default user, then every Nifty 50 symbol in turn, printing
+# progress. A 1s sleep between symbols is a deliberate throttle against yfinance rate limits.
 def main() -> None:
     with Session(engine) as session:
         ensure_default_user(session)

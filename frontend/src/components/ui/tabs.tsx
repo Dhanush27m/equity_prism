@@ -1,3 +1,12 @@
+/**
+ * Component: Frontend -> components/ui -> Tabs primitive
+ * Belongs to: the base UI kit (src/components/ui) — used on the Company page (statement
+ * type/period tabs) and Settings.
+ * Purpose: a minimal controlled-or-uncontrolled tabs implementation (React Context +
+ * Tabs/TabsList/TabsTrigger/TabsContent), avoiding a full external tabs library
+ * dependency for this app's simple needs.
+ */
+
 "use client";
 
 import * as React from "react";
@@ -11,6 +20,8 @@ interface TabsCtx {
 
 const Ctx = React.createContext<TabsCtx | null>(null);
 
+// Root: works either controlled (value + onValueChange) or uncontrolled (defaultValue,
+// managing its own state) — the same dual-mode pattern most headless UI libraries use.
 export function Tabs({
   value,
   onValueChange,
@@ -48,6 +59,7 @@ export function TabsList({ className, children }: { className?: string; children
   );
 }
 
+// One clickable tab button; reads/writes the shared value via context.
 export function TabsTrigger({ value, children }: { value: string; children: React.ReactNode }) {
   const ctx = React.useContext(Ctx);
   if (!ctx) return null;
@@ -65,6 +77,7 @@ export function TabsTrigger({ value, children }: { value: string; children: Reac
   );
 }
 
+// Renders its children only when its `value` matches the active tab.
 export function TabsContent({ value, children }: { value: string; children: React.ReactNode }) {
   const ctx = React.useContext(Ctx);
   if (!ctx || ctx.value !== value) return null;

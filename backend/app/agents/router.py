@@ -1,9 +1,20 @@
+"""
+Component: Backend -> AI Orchestration Layer (LangGraph)
+Belongs to: the first node of the chat graph (app/agents/graph.py builds START -> router).
+Purpose: decides which of the five specialist agents should run for a given question.
+Uses a deterministic keyword/data-availability heuristic as the safe default, then tries
+an LLM call to refine that plan, and always validates the final agent list against what
+data is actually available before handing it to the graph's fan-out step.
+"""
+
 import json
 
 from app.llm.factory import complete
 
+# The only specialist node names the router is allowed to select.
 ALLOWED_AGENTS = {"company_analyst", "comparator", "sentiment", "portfolio", "document_research"}
 
+# System prompt for the LLM-based routing call (JSON-mode, temperature 0).
 ROUTER_SYS = (
     "You are the routing planner for an Indian-equity research assistant. "
     "Given a user question and context, decide which specialist agents should run. "
@@ -21,6 +32,7 @@ ROUTER_SYS = (
     'Respond with strict JSON: {"agents": ["..."], "reasoning": "one short sentence"}.'
 )
 
+# Keyword hints used by the deterministic fallback heuristic below.
 SENTIMENT_HINTS = ("news", "sentiment", "outlook", "recent", "happening", "update", "latest", "buzz")
 PORTFOLIO_HINTS = ("portfolio", "holding", "my stocks", "allocation", "p&l", "pnl", "profit", "invest")
 DOCUMENT_HINTS = (
@@ -29,6 +41,8 @@ DOCUMENT_HINTS = (
 )
 
 
+# Pure, no-LLM routing plan built from keyword hints and how many symbols/what data is
+# available. Always runs first and is the plan actually used if the LLM call below fails.
 def _deterministic_plan(question: str, symbols: list[str], snapshot: dict) -> dict:
     q = question.lower()
     agents: list[str] = []
@@ -51,6 +65,9 @@ def _deterministic_plan(question: str, symbols: list[str], snapshot: dict) -> di
     return {"agents": list(dict.fromkeys(agents)), "reasoning": "heuristic routing", "source": "deterministic"}
 
 
+# Filters an agent list (from either the heuristic or the LLM) down to agents that are
+# both known and actually backed by real data for this request (e.g. no comparator
+# without 2+ symbols, no portfolio agent without holdings).
 def _validate(agents: list[str], symbols: list[str], snapshot: dict) -> list[str]:
     out: list[str] = []
     for a in agents:
@@ -70,6 +87,10 @@ def _validate(agents: list[str], symbols: list[str], snapshot: dict) -> list[str
     return list(dict.fromkeys(out))
 
 
+# LangGraph node entry point. Builds the deterministic plan first, then attempts to
+# refine it with an LLM call; any LLM failure (timeout, bad JSON, etc.) is swallowed so
+# the deterministic plan is always what ends up used. Returns the state update
+# ({"plan": ...}) that LangGraph merges into AgentState.
 async def run(state: dict, config: dict | None = None) -> dict:
     tracer = (config or {}).get("configurable", {}).get("tracer")
     question = state["question"]

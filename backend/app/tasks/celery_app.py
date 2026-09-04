@@ -1,3 +1,12 @@
+"""
+Component: Backend -> Tasks -> Celery app (local/self-hosted profile only)
+Belongs to: the background-job runtime used when INGEST_MODE=celery (the local/self-
+hosted default) — not used in the hosted/free-tier deployment, which uses FastAPI
+BackgroundTasks instead (see api/routes/documents.py's _dispatch_ingestion).
+Purpose: configures the Celery application (Redis broker + result backend) that a
+separate worker process consumes tasks from.
+"""
+
 from celery import Celery
 
 from app.core.config import get_settings

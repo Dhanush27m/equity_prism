@@ -1,3 +1,12 @@
+/**
+ * Component: Frontend -> components -> Markdown renderer
+ * Belongs to: renders every assistant chat answer on the Prism Chat page (the
+ * synthesizer's output is always markdown — see agents/synthesizer.py's system prompt).
+ * Purpose: react-markdown with GFM (tables, etc.) and a set of custom component
+ * overrides so headings/lists/tables/links/code render with this app's Tailwind styling
+ * instead of unstyled browser defaults.
+ */
+
 "use client";
 
 import ReactMarkdown from "react-markdown";

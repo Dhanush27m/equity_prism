@@ -1,3 +1,12 @@
+/**
+ * Component: Frontend -> components -> Chat citations
+ * Belongs to: rendered under each assistant message on the Prism Chat page.
+ * Purpose: the UI half of the project's "never invent, always cite" grounding promise
+ * — a collapsible list of the exact sources (stored metrics, a news link, or a document
+ * filename+page+snippet) an answer's claims are based on, so a user can verify any
+ * specific claim rather than trusting it blindly.
+ */
+
 "use client";
 
 import { ChevronDown, ExternalLink, FileText, Newspaper, BarChart2 } from "lucide-react";
@@ -6,12 +15,16 @@ import * as React from "react";
 import { Badge } from "@/components/ui/badge";
 import type { Citation } from "@/lib/types";
 
+// Picks an icon based on citation type (document/news/financials-default).
 function icon(type?: string) {
   if (type === "document") return <FileText className="h-3.5 w-3.5" />;
   if (type === "news") return <Newspaper className="h-3.5 w-3.5" />;
   return <BarChart2 className="h-3.5 w-3.5" />;
 }
 
+// Renders nothing if there are no citations; otherwise a collapsed-by-default "N
+// sources" toggle that expands into one card per citation with its marker number,
+// label/filename, page number (documents), external link (news), and text snippet.
 export function Citations({ citations }: { citations: Citation[] }) {
   const [open, setOpen] = React.useState(false);
   if (!citations?.length) return null;

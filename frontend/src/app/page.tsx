@@ -1,3 +1,11 @@
+/**
+ * Component: Frontend -> app -> Dashboard page (route "/")
+ * Belongs to: the app's landing screen.
+ * Purpose: an at-a-glance market overview — live index cards, a quick-ask box that
+ * jumps into Prism Chat with a pre-filled question, the user's watchlist, and a
+ * portfolio summary with sector-allocation bar.
+ */
+
 "use client";
 
 import { ArrowRight, Sparkles, Star, TrendingUp } from "lucide-react";
@@ -15,6 +23,7 @@ import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { useIndices, usePortfolio, useWatchlist } from "@/lib/hooks";
 import { cn, formatCr, formatPct, formatPrice, signClass } from "@/lib/utils";
 
+// Palette cycled through for the sector-allocation bar segments below.
 const ALLOC_COLORS = [
   "bg-blue-500",
   "bg-emerald-500",
@@ -25,6 +34,7 @@ const ALLOC_COLORS = [
   "bg-lime-500",
 ];
 
+// One index tile (NIFTY 50 / SENSEX / BANK NIFTY / INDIA VIX).
 function IndexCard({
   name,
   value,
@@ -50,6 +60,8 @@ function IndexCard({
   );
 }
 
+// A single-input form that jumps straight into Prism Chat with the typed question
+// pre-filled via the ?q= query param.
 function QuickAsk() {
   const router = useRouter();
   const [q, setQ] = React.useState("");
@@ -82,6 +94,9 @@ function QuickAsk() {
   );
 }
 
+// The watchlist card: loading skeletons, an error state with retry, an empty-state
+// nudge toward the screener, or the actual table of tracked symbols with price/market
+// cap/risk badge.
 function Watchlist() {
   const { data, isLoading, isError, refetch } = useWatchlist();
   return (
@@ -148,6 +163,9 @@ function Watchlist() {
   );
 }
 
+// The portfolio summary card: current value, total P&L, invested amount, and a
+// stacked-bar sector-allocation visualization, with a link through to the full
+// Portfolio page for management.
 function PortfolioSummary() {
   const { data, isLoading } = usePortfolio();
   return (

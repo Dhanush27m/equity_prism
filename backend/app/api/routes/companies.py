@@ -1,3 +1,10 @@
+"""
+Component: Backend -> API Layer -> Companies
+Belongs to: the top-bar search box and the general "list/lookup a tracked company" surface.
+Purpose: search/list/fetch Company rows from the seeded Nifty 50 dataset — pure DB reads,
+no external calls, powers autocomplete and the Company page's initial load.
+"""
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +16,8 @@ from app.schemas.company import CompanyOut
 router = APIRouter(prefix="/companies", tags=["companies"])
 
 
+# Lists companies, optionally filtered by sector or a case-insensitive name/symbol
+# substring search, paginated via limit/offset.
 @router.get("", response_model=list[CompanyOut])
 async def list_companies(
     sector: str | None = Query(default=None),
@@ -30,6 +39,7 @@ async def list_companies(
     return list(result.scalars().all())
 
 
+# Fetches one company by its ticker symbol.
 @router.get("/{symbol}", response_model=CompanyOut)
 async def get_company(symbol: str, db: AsyncSession = Depends(get_db)) -> Company:
     stmt = select(Company).where(Company.symbol == symbol.upper())

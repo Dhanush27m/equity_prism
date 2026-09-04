@@ -1,3 +1,13 @@
+"""
+Component: Backend -> LLM Layer
+Belongs to: the single choke point every agent, the router, and the synthesizer call
+through (app/agents/*.py all import `complete`/`stream_complete` from here — nothing
+calls Groq or Ollama directly).
+Purpose: a minimal (httpx-based, no SDK) chat-completion client with a provider fallback
+chain (Groq first, Ollama second) and retry-with-backoff, in both non-streaming and
+streaming (SSE) forms.
+"""
+
 import asyncio
 import json
 import time
@@ -13,6 +23,7 @@ GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 MAX_ATTEMPTS = 3
 
 
+# Uniform result shape returned by complete() regardless of which provider answered.
 @dataclass
 class LLMResult:
     text: str
@@ -22,6 +33,7 @@ class LLMResult:
     usage: dict | None = None
 
 
+# One non-streaming call to Groq's OpenAI-compatible chat-completions endpoint.
 async def _groq(messages: list[dict], temperature: float, max_tokens: int, json_mode: bool) -> tuple[str, dict]:
     payload: dict = {
         "model": settings.groq_model,
@@ -40,6 +52,9 @@ async def _groq(messages: list[dict], temperature: float, max_tokens: int, json_
         return text, data.get("usage") or {}
 
 
+# One non-streaming call to a local/self-hosted Ollama instance — the fallback path used
+# when Groq is unavailable. In the deployed environment there is no reachable Ollama host,
+# so this fails fast in production; it is a live path only in the local/self-hosted profile.
 async def _ollama(messages: list[dict], temperature: float, max_tokens: int, json_mode: bool) -> tuple[str, dict]:
     payload: dict = {
         "model": settings.ollama_model,
@@ -61,6 +76,10 @@ async def _ollama(messages: list[dict], temperature: float, max_tokens: int, jso
         return text, usage
 
 
+# Main non-streaming entry point used by the router, every specialist agent, and the
+# non-streaming synthesizer. Tries Groq up to MAX_ATTEMPTS times with exponential
+# backoff, then falls through to Ollama the same way; raises only if every attempt on
+# both providers fails. Logs a trace generation on success if a tracer is supplied.
 async def complete(
     messages: list[dict],
     *,
@@ -101,6 +120,9 @@ async def complete(
     raise RuntimeError("LLM unavailable: " + " | ".join(errors[-4:]))
 
 
+# Streams one Groq chat-completion response as an async generator of raw text deltas,
+# parsing Groq's Server-Sent-Events wire format line by line; captures token usage from
+# the final SSE chunk into usage_sink (mutated in place) since Groq only reports it there.
 async def _groq_stream(messages: list[dict], temperature: float, max_tokens: int, usage_sink: dict):
     payload = {
         "model": settings.groq_model,
@@ -134,6 +156,7 @@ async def _groq_stream(messages: list[dict], temperature: float, max_tokens: int
                     yield delta
 
 
+# Streams one Ollama chat response the same way, for the fallback path.
 async def _ollama_stream(messages: list[dict], temperature: float, max_tokens: int):
     payload = {
         "model": settings.ollama_model,
@@ -158,6 +181,11 @@ async def _ollama_stream(messages: list[dict], temperature: float, max_tokens: i
                     break
 
 
+# Streaming entry point used by the SSE synthesizer path (app/agents/synthesizer.py's
+# stream()). Yields {"type": "token", "delta": ...} events as they arrive from Groq (or
+# Ollama if Groq fails before producing any output), then a final {"type": "meta", ...}
+# event with the model/source/latency once the stream ends. If a stream fails partway
+# through, already-yielded tokens are kept rather than restarted or discarded.
 async def stream_complete(
     messages: list[dict],
     *,

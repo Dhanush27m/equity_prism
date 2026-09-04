@@ -1,3 +1,10 @@
+"""
+Component: Backend -> API Layer -> Screener
+Belongs to: the Screener page — filters/sorts the Nifty 50 by fundamentals.
+Purpose: a thin HTTP wrapper that collects query-string filters into one dict and hands
+them to services/screener.screen, which does the actual stored-data filtering/sorting.
+"""
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -7,6 +14,8 @@ from app.services.screener import screen
 router = APIRouter(prefix="/screener", tags=["screener"])
 
 
+# Accepts sector/market-cap/P-E/ROE/dividend-yield filters plus sort/limit options, and
+# returns matching companies from stored data (never live yfinance calls per row).
 @router.get("")
 async def run_screener(
     sector: str | None = Query(default=None),

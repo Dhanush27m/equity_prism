@@ -1,3 +1,12 @@
+/**
+ * Component: Frontend -> components -> Root providers
+ * Belongs to: mounted once in app/layout.tsx, wrapping the entire app.
+ * Purpose: sets up the two pieces of app-wide client state every page needs — a
+ * TanStack Query client (server-state cache/refetching) and a light/dark theme context
+ * (persisted to localStorage, defaulting to the OS preference on first visit) — then
+ * renders AccessGate so no page content mounts before the access-key gate resolves.
+ */
+
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -28,6 +37,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = React.useState<Theme>("dark");
   const [mounted, setMounted] = React.useState(false);
 
+  // Resolves the initial theme after mount (avoids SSR/client mismatch): stored
+  // preference first, else the OS's prefers-color-scheme.
   React.useEffect(() => {
     const stored = (typeof localStorage !== "undefined" &&
       (localStorage.getItem("theme") as Theme | null)) || null;
@@ -38,6 +49,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     setMounted(true);
   }, []);
 
+  // Syncs the `.dark` class on <html> and persists the choice whenever it changes.
   React.useEffect(() => {
     if (!mounted) return;
     document.documentElement.classList.toggle("dark", theme === "dark");

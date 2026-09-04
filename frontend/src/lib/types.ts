@@ -1,3 +1,13 @@
+/**
+ * Component: Frontend -> lib -> Shared TypeScript types
+ * Belongs to: imported by lib/hooks.ts and nearly every page/component — the frontend's
+ * mirror of the backend's Pydantic schemas and route response shapes.
+ * Purpose: one place defining every API response shape the UI consumes, so pages get
+ * type-checked access to fields like `Ratios.pe` or `Portfolio.holdings` without
+ * duplicating the shape definition per component.
+ */
+
+// Mirrors backend CompanyOut (schemas/company.py).
 export interface Company {
   id: number;
   symbol: string;
@@ -10,6 +20,7 @@ export interface Company {
   current_price: number | null;
 }
 
+// One row from GET /api/market/indices.
 export interface IndexQuote {
   key: string;
   name: string;
@@ -19,6 +30,7 @@ export interface IndexQuote {
   change_pct: number | null;
 }
 
+// One OHLCV candle from GET /api/companies/{symbol}/history.
 export interface Candle {
   time: string;
   open: number;
@@ -35,6 +47,7 @@ export interface HistoryResponse {
   candles: Candle[];
 }
 
+// Mirrors the fields in backend FinancialMetric / services/ratios.py's METRIC_FIELDS.
 export interface Ratios {
   symbol: string;
   source: string;
@@ -66,6 +79,7 @@ export interface RiskSignalItem {
   severity: number;
 }
 
+// GET /api/companies/{symbol}/risk response.
 export interface Risk {
   symbol: string;
   source: string;
@@ -73,6 +87,7 @@ export interface Risk {
   signals: RiskSignalItem[] | Record<string, unknown>[];
 }
 
+// GET /api/companies/{symbol}/statements/{kind} response — rows keyed by line-item name.
 export interface StatementResponse {
   symbol: string;
   kind: string;
@@ -97,6 +112,7 @@ export interface NewsResponse {
   articles: NewsArticle[];
 }
 
+// One row from GET /api/screener.
 export interface ScreenerRow {
   symbol: string;
   name: string;
@@ -108,6 +124,7 @@ export interface ScreenerRow {
   dividend_yield: number | null;
 }
 
+// One row from GET /api/watchlist.
 export interface WatchlistRow {
   id: number;
   symbol: string;
@@ -120,6 +137,7 @@ export interface WatchlistRow {
   risk_score: number | null;
 }
 
+// One row from GET /api/portfolio's `holdings` — already priced/P&L-computed server-side.
 export interface Holding {
   id: number;
   symbol: string;
@@ -154,6 +172,7 @@ export interface Portfolio {
   sector_allocation: SectorAllocation[];
 }
 
+// One row from GET /api/documents.
 export interface DocumentItem {
   id: number;
   filename: string;
@@ -164,6 +183,9 @@ export interface DocumentItem {
   created_at: string;
 }
 
+// One citation entry attached to a chat answer — shape varies slightly by which
+// specialist agent produced it (financials/portfolio citations are label-only, document
+// citations carry filename/page/snippet, news citations carry a url).
 export interface Citation {
   agent?: string;
   type?: string;
@@ -177,6 +199,7 @@ export interface Citation {
   url?: string;
 }
 
+// One entry from GET /api/chat/agents — used for the "how this works" explainer UI.
 export interface AgentInfo {
   id: string;
   name: string;

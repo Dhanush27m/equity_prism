@@ -1,3 +1,11 @@
+/**
+ * Component: Frontend -> components -> Navigation sidebar
+ * Belongs to: rendered by app-shell.tsx (fixed on desktop, slide-over on mobile).
+ * Purpose: the primary navigation between the app's 9 screens, highlighting the active
+ * route, plus an optional "Agent Traces" link to LangFuse (only shown when
+ * NEXT_PUBLIC_TRACES_URL is configured — hidden entirely otherwise) and a link to Settings.
+ */
+
 "use client";
 
 import {
@@ -19,6 +27,8 @@ import { cn } from "@/lib/utils";
 
 const TRACES_URL = process.env.NEXT_PUBLIC_TRACES_URL;
 
+// The main nav — one entry per top-level page (Dashboard is "/", everything else its
+// own route). Settings is rendered separately below since it sits in its own footer group.
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/chat", label: "Prism Chat", icon: MessageSquare },

@@ -1,3 +1,12 @@
+/**
+ * Component: Frontend -> app -> Documents page (route "/documents")
+ * Belongs to: the RAG feature's UI — upload, ingestion-status tracking, and Q&A.
+ * Purpose: a drag-and-drop PDF uploader, a live-polled list of the user's documents
+ * (status pending -> processing -> ready/failed), and an inline document-Q&A box that
+ * streams a cited answer directly from the document_research specialist agent —
+ * independent of the main Prism Chat thread/history.
+ */
+
 "use client";
 
 import { FileText, Send, Sparkles, Trash2, Upload } from "lucide-react";
@@ -15,6 +24,7 @@ import { useDeleteDocument, useDocuments, useUploadDocument } from "@/lib/hooks"
 import type { Citation, DocumentItem } from "@/lib/types";
 import { cn, formatRelativeTime } from "@/lib/utils";
 
+// Maps a Document's backend status to its display badge.
 function statusBadge(status: DocumentItem["status"]) {
   switch (status) {
     case "ready":
@@ -32,6 +42,8 @@ function statusBadge(status: DocumentItem["status"]) {
   }
 }
 
+// Drag-and-drop (or click-to-browse) PDF upload area; only accepts .pdf files
+// client-side (the backend re-validates on upload_document).
 function Dropzone() {
   const upload = useUploadDocument();
   const [drag, setDrag] = React.useState(false);
@@ -88,6 +100,10 @@ function Dropzone() {
   );
 }
 
+// A standalone document-Q&A box: reuses lib/api.ts's streamChat directly (not
+// lib/use-chat.ts / the chat store) since this is a one-off inline query, not part of
+// the persisted chat thread history — a fresh question here always routes to
+// document_research since it's asked from this page, not tied to a symbol.
 function DocQA({ ready }: { ready: boolean }) {
   const [input, setInput] = React.useState("");
   const [answer, setAnswer] = React.useState("");
@@ -159,6 +175,8 @@ function DocQA({ ready }: { ready: boolean }) {
 }
 
 export default function DocumentsPage() {
+  // Polls every 3s (useDocuments(true)) so status updates (pending -> processing ->
+  // ready) show up live without the user refreshing.
   const { data } = useDocuments(true);
   const del = useDeleteDocument();
   const docs = data?.documents ?? [];

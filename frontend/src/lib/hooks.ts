@@ -1,3 +1,12 @@
+/**
+ * Component: Frontend -> lib -> TanStack Query hooks
+ * Belongs to: imported by nearly every page (dashboard, company, compare, portfolio,
+ * screener, documents, news) — the data-fetching layer sitting on top of lib/api.ts.
+ * Purpose: one useQuery/useMutation hook per backend endpoint, giving pages caching,
+ * automatic refetching, and loading/error state for free instead of each page managing
+ * fetch calls itself.
+ */
+
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiDelete, apiGet, apiPost, apiUpload } from "./api";
@@ -16,6 +25,7 @@ import type {
   WatchlistRow,
 } from "./types";
 
+// Liveness check — used to detect the backend waking from its free-tier cold start.
 export function useHealth() {
   return useQuery({
     queryKey: ["health"],
@@ -24,6 +34,7 @@ export function useHealth() {
   });
 }
 
+// Dashboard index cards — polled every 60s.
 export function useIndices() {
   return useQuery({
     queryKey: ["indices"],
@@ -32,6 +43,7 @@ export function useIndices() {
   });
 }
 
+// Company search/list — powers the top-bar search box and screener lookups.
 export function useCompanies(params: { search?: string; sector?: string } = {}) {
   const qs = new URLSearchParams();
   if (params.search) qs.set("search", params.search);
@@ -51,6 +63,7 @@ export function useCompany(symbol: string) {
   });
 }
 
+// Price chart candles for the Company page.
 export function useHistory(symbol: string, period: string) {
   return useQuery({
     queryKey: ["history", symbol, period],
@@ -67,6 +80,8 @@ export function useRatios(symbol: string) {
   });
 }
 
+// Fetches ratios for multiple symbols at once — used by the Compare page (one query per
+// symbol, run in parallel via useQueries).
 export function useMultiRatios(symbols: string[]) {
   return useQueries({
     queries: symbols.map((s) => ({
@@ -115,6 +130,8 @@ export interface ScreenerFilters {
   desc?: boolean;
 }
 
+// Screener results — refetches whenever the filters object changes (it's part of the
+// query key).
 export function useScreener(filters: ScreenerFilters) {
   const qs = new URLSearchParams();
   Object.entries(filters).forEach(([k, v]) => {
@@ -134,6 +151,8 @@ export function useWatchlist() {
   });
 }
 
+// Adding/removing a watchlist symbol invalidates the watchlist query so the dashboard
+// refetches automatically rather than the caller manually updating cache.
 export function useAddWatchlist() {
   const qc = useQueryClient();
   return useMutation({
@@ -157,6 +176,9 @@ export function usePortfolio() {
   });
 }
 
+// Add/remove holding mutations write the response directly into the query cache
+// (setQueryData) rather than invalidating, since the backend already returns the full
+// recomputed portfolio view — avoids an extra round trip.
 export function useAddHolding() {
   const qc = useQueryClient();
   return useMutation({
@@ -174,6 +196,8 @@ export function useRemoveHolding() {
   });
 }
 
+// Document list — optionally polled every 3s while a document is still
+// pending/processing, so the Documents page shows ingestion status live.
 export function useDocuments(poll = false) {
   return useQuery({
     queryKey: ["documents"],
@@ -198,6 +222,8 @@ export function useDeleteDocument() {
   });
 }
 
+// Static agent metadata for the chat UI — staleTime: Infinity since this never changes
+// at runtime.
 export function useAgents() {
   return useQuery({
     queryKey: ["agents"],

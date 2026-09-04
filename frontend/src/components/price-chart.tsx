@@ -1,3 +1,11 @@
+/**
+ * Component: Frontend -> components -> Candlestick price chart
+ * Belongs to: rendered on the Company page from GET /api/companies/{symbol}/history data.
+ * Purpose: wraps TradingView's lightweight-charts library (a purpose-built financial
+ * charting library, chosen over the general-purpose Recharts used elsewhere for exactly
+ * this OHLCV use case) into a candlestick + volume chart that re-themes with light/dark mode.
+ */
+
 "use client";
 
 import {
@@ -16,6 +24,8 @@ export function PriceChart({ candles }: { candles: Candle[] }) {
   const chartRef = React.useRef<IChartApi | null>(null);
   const { theme } = useTheme();
 
+  // Rebuilds the chart whenever candles or the theme changes (lightweight-charts isn't
+  // designed for partial re-theming, so the whole chart is torn down and recreated).
   React.useEffect(() => {
     if (!ref.current) return;
     const dark = theme === "dark";
@@ -55,6 +65,8 @@ export function PriceChart({ candles }: { candles: Candle[] }) {
       }))
     );
 
+    // Volume histogram on a separate price scale pinned to the bottom ~18% of the
+    // chart, colored per-candle to match the candlestick's up/down color.
     const volSeries = chart.addHistogramSeries({
       priceFormat: { type: "volume" },
       priceScaleId: "vol",

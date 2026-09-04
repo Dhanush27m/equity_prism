@@ -1,7 +1,16 @@
+"""
+Component: Backend -> AI Orchestration Layer -> Specialist agent (LangGraph node)
+Belongs to: one of the five parallel specialists dispatched by the router.
+Purpose: produces a side-by-side valuation/profitability/leverage/growth comparison
+across 2+ stocks, grounded strictly in each company's stored metrics from the snapshot.
+"""
+
 import json
 
 from app.llm.factory import complete
 
+# System prompt: same grounding rule as the other specialists, plus the specific
+# comparison table structure (valuation/profitability/leverage/growth) the model must follow.
 SYS = (
     "You are an equity strategist comparing Indian listed companies for a research client. "
     "Use ONLY the numbers in the verified data snapshot; never invent figures. Missing metrics are "
@@ -15,6 +24,8 @@ SYS = (
 )
 
 
+# LangGraph node entry point. No-ops if fewer than 2 of the router-resolved symbols are
+# actually present in the snapshot (comparator needs at least 2 real companies to compare).
 async def run(state: dict, config: dict | None = None) -> dict:
     tracer = (config or {}).get("configurable", {}).get("tracer")
     symbols = state.get("symbols", [])

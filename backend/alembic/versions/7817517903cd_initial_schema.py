@@ -1,9 +1,13 @@
 """initial schema
 
 Revision ID: 7817517903cd
-Revises: 
+Revises:
 Create Date: 2026-07-25 10:14:18.205381
 
+Component: Backend -> Data Layer -> Alembic migration (first in the chain, down_revision=None)
+Purpose: creates the whole base schema — companies, users, documents (+ document_chunks
+with its pgvector embedding column), financial_statements, portfolio_holdings, and
+watchlist_items — and enables the `vector` Postgres extension pgvector needs.
 """
 from typing import Sequence, Union
 

@@ -1,3 +1,12 @@
+"""
+Component: Backend -> Data Layer -> ORM model (RAG observability)
+Belongs to: written by app/agents/document_research.py after every document-grounded
+answer, and by app/eval/rag_eval.py during offline evaluation.
+Purpose: an audit trail of RAG question/answer pairs — which chunks were retrieved,
+what citations were produced, which model answered, and the LangFuse trace id — kept
+for later inspection, not read back by any live endpoint today.
+"""
+
 from datetime import datetime
 
 from sqlalchemy import DateTime, Integer, String, Text, func

@@ -1,3 +1,13 @@
+"""
+Component: Backend -> API Layer -> Documents (RAG upload/management)
+Belongs to: the HTTP surface for the RAG feature's document lifecycle — everything the
+Documents page in the frontend calls.
+Purpose: accepts PDF uploads, stores them to disk, kicks off background ingestion
+(Celery or FastAPI BackgroundTasks depending on INGEST_MODE), and lists/fetches/deletes
+document records. The actual text-extraction/chunking/embedding work happens in
+app/rag/ingestion.py, not here.
+"""
+
 import os
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
@@ -12,6 +22,10 @@ settings = get_settings()
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 
+# Kicks off ingestion for a newly-uploaded document via whichever mechanism is
+# configured: a real Celery task in the local/self-hosted profile (INGEST_MODE=celery),
+# or a same-process FastAPI BackgroundTask in the hosted profile (INGEST_MODE=background,
+# avoids needing a Celery worker + broker on the free tier).
 def _dispatch_ingestion(document_id: int, background_tasks: BackgroundTasks) -> None:
     if settings.ingest_mode == "celery":
         from app.tasks.celery_app import celery_app
@@ -23,6 +37,7 @@ def _dispatch_ingestion(document_id: int, background_tasks: BackgroundTasks) -> 
         background_tasks.add_task(process_document, document_id)
 
 
+# Shapes a Document row into the JSON the frontend expects.
 def _serialize(doc: Document) -> dict:
     return {
         "id": doc.id,
@@ -35,6 +50,8 @@ def _serialize(doc: Document) -> dict:
     }
 
 
+# Gets-or-creates the single local user (duplicated here rather than importing
+# app.api.deps.get_local_user — same get-or-create logic, kept local to this module).
 async def _local_user(db: AsyncSession) -> User:
     user = (await db.execute(select(User).where(User.username == "local"))).scalar_one_or_none()
     if user is None:
@@ -45,6 +62,7 @@ async def _local_user(db: AsyncSession) -> User:
     return user
 
 
+# Lists all documents uploaded by the local user, most recent first.
 @router.get("")
 async def list_documents(db: AsyncSession = Depends(get_db)) -> dict:
     user = await _local_user(db)
@@ -56,6 +74,9 @@ async def list_documents(db: AsyncSession = Depends(get_db)) -> dict:
     return {"documents": [_serialize(d) for d in rows]}
 
 
+# Accepts a multipart PDF upload: validates type/size, writes it to UPLOAD_DIR named by
+# the new Document row's id, creates the row with status="pending", and dispatches
+# background ingestion. Returns immediately — the client polls status via GET below.
 @router.post("", status_code=201)
 async def upload_document(
     background_tasks: BackgroundTasks,
@@ -87,6 +108,8 @@ async def upload_document(
     return _serialize(document)
 
 
+# Fetches one document's current status (pending/processing/ready/failed) — the frontend
+# polls this while a PDF is being ingested.
 @router.get("/{document_id}")
 async def get_document(document_id: int, db: AsyncSession = Depends(get_db)) -> dict:
     doc = (await db.execute(select(Document).where(Document.id == document_id))).scalar_one_or_none()
@@ -95,6 +118,8 @@ async def get_document(document_id: int, db: AsyncSession = Depends(get_db)) -> 
     return _serialize(doc)
 
 
+# Deletes a document (its chunks cascade-delete via the DB relationship) and removes the
+# stored PDF file from disk, best-effort (a missing file is not an error).
 @router.delete("/{document_id}", status_code=204)
 async def delete_document(document_id: int, db: AsyncSession = Depends(get_db)) -> None:
     doc = (await db.execute(select(Document).where(Document.id == document_id))).scalar_one_or_none()

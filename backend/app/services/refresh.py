@@ -1,3 +1,13 @@
+"""
+Component: Backend -> Services -> Batch data refresh script
+Belongs to: run manually (`python -m app.services.refresh`, ~5-7 min for the full Nifty
+50) — see DEPLOY.md Step 2. Not called from the API. This is what keeps the "stored"
+data api/routes/market.py's /ratios and /risk endpoints serve actually up to date.
+Purpose: for every seeded company, re-fetches fundamentals, recomputes ratios/risk
+(via services/ratios.py), and upserts the results into FinancialMetric/RiskSignal —
+the stored-first data every specialist agent's snapshot is grounded in.
+"""
+
 import time
 
 from sqlalchemy import create_engine, select
@@ -12,6 +22,9 @@ settings = get_settings()
 engine = create_engine(settings.database_url_sync, future=True)
 
 
+# Updates a Company row's core fields (name/sector/industry/market_cap/price/currency)
+# from freshly fetched fundamentals, only overwriting fields that actually came back
+# non-empty (so a partial/failed fetch never blanks out previously-good data).
 def _update_company_core(session: Session, company: Company, fundamentals: dict) -> None:
     name = fundamentals.get("longName")
     if name:
@@ -29,6 +42,8 @@ def _update_company_core(session: Session, company: Company, fundamentals: dict)
         company.currency = fundamentals["currency"]
 
 
+# Creates or updates the one FinancialMetric row for a company from a freshly computed
+# metrics dict.
 def _upsert_metric(session: Session, company_id: int, metrics: dict) -> None:
     row = session.scalar(select(FinancialMetric).where(FinancialMetric.company_id == company_id))
     if row is None:
@@ -42,6 +57,7 @@ def _upsert_metric(session: Session, company_id: int, metrics: dict) -> None:
         setattr(row, field, metrics.get(field))
 
 
+# Creates or updates the one RiskSignal row for a company from a freshly computed risk dict.
 def _upsert_risk(session: Session, company_id: int, risk: dict) -> None:
     row = session.scalar(select(RiskSignal).where(RiskSignal.company_id == company_id))
     if row is None:
@@ -51,6 +67,7 @@ def _upsert_risk(session: Session, company_id: int, risk: dict) -> None:
     row.signals = risk["signals"]
 
 
+# Full refresh for one company: fetch -> compute -> upsert -> commit.
 def refresh_symbol(session: Session, company: Company) -> dict:
     fundamentals = get_fundamentals(company.symbol)
     _update_company_core(session, company, fundamentals)
@@ -62,6 +79,9 @@ def refresh_symbol(session: Session, company: Company) -> dict:
     return {"metrics": metrics, "risk": risk}
 
 
+# Entry point: refreshes every seeded company in turn, printing progress; a per-symbol
+# failure is caught, rolled back, and logged rather than aborting the whole run. A 1s
+# sleep between symbols throttles against yfinance rate limits.
 def main() -> None:
     with Session(engine) as session:
         companies = list(session.scalars(select(Company).order_by(Company.symbol)))

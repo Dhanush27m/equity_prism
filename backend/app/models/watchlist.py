@@ -1,3 +1,10 @@
+"""
+Component: Backend -> Data Layer -> ORM model
+Belongs to: the Dashboard's watchlist card, read/written via api/routes/watchlist.py.
+Purpose: one row per (user, symbol) the user is tracking; the unique constraint prevents
+adding the same symbol twice.
+"""
+
 from datetime import datetime
 
 from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func

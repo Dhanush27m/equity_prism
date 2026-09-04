@@ -1,3 +1,11 @@
+"""
+Component: Backend -> Services -> Screener
+Belongs to: called from api/routes/screener.py.
+Purpose: builds and runs one filtered/sorted SQL query over Company LEFT JOIN
+FinancialMetric — entirely stored data, no live yfinance calls per row (so screening
+stays fast regardless of how many filters are applied).
+"""
+
 from typing import Any
 
 from sqlalchemy import select
@@ -5,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Company, FinancialMetric
 
+# Which columns a `sort_by` query param is allowed to map to.
 SORTABLE = {
     "market_cap": Company.market_cap,
     "pe": FinancialMetric.pe,
@@ -14,6 +23,10 @@ SORTABLE = {
 }
 
 
+# Applies every provided filter as a WHERE clause, sorts by the requested column, and
+# returns the matching rows shaped for the Screener table. Uses an outer join so a
+# company with no FinancialMetric row yet still appears (with null ratio fields) rather
+# than being silently excluded.
 async def screen(db: AsyncSession, filters: dict[str, Any]) -> list[dict]:
     stmt = select(Company, FinancialMetric).join(
         FinancialMetric, FinancialMetric.company_id == Company.id, isouter=True

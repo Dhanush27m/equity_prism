@@ -1,3 +1,13 @@
+/**
+ * Component: Frontend -> components -> Access gate
+ * Belongs to: wraps the whole app in app/layout.tsx.
+ * Purpose: the client-side half of the shared-password gate (backend half is
+ * core/auth.py's access_gate middleware). Prompts for the access key, verifies it by
+ * calling a real protected endpoint, stores it in localStorage on success, and
+ * re-locks itself if a later request comes back 401 (session/key invalidated).
+ * No-ops entirely (renders children directly) when NEXT_PUBLIC_REQUIRE_ACCESS_KEY isn't "1".
+ */
+
 "use client";
 
 import { KeyRound } from "lucide-react";
@@ -14,6 +24,8 @@ export function AccessGate({ children }: { children: React.ReactNode }) {
   const [error, setError] = React.useState("");
   const [busy, setBusy] = React.useState(false);
 
+  // On mount: unlock immediately if a key is already stored, and listen for the global
+  // "equity-prism-unauthorized" event (fired by lib/api.ts on any 401) to re-lock.
   React.useEffect(() => {
     if (!REQUIRED) return;
     if (getAccessKey()) setUnlocked(true);
@@ -25,6 +37,8 @@ export function AccessGate({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("equity-prism-unauthorized", onUnauthorized);
   }, []);
 
+  // Validates the entered key by actually calling a protected endpoint (rather than
+  // just trusting the input) — only unlocks the UI if the backend accepts it.
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!value || busy) return;

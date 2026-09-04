@@ -1,3 +1,11 @@
+/**
+ * Component: Frontend -> components/ui -> Table primitives
+ * Belongs to: the base UI kit (src/components/ui) — used by the Screener, Watchlist,
+ * Portfolio, and financial statement tables.
+ * Purpose: thin styled wrappers around the native table elements (with a horizontal
+ * scroll container built in for wide tables on small screens).
+ */
+
 import * as React from "react";
 
 import { cn } from "@/lib/utils";

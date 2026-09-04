@@ -1,3 +1,12 @@
+/**
+ * Component: Frontend -> app -> Portfolio page (route "/portfolio")
+ * Belongs to: holdings management, backed by the portfolio specialist agent for AI review.
+ * Purpose: an add-holding form, a live P&L table and sector-allocation donut chart (both
+ * from GET /api/portfolio — already priced/computed server-side, this page just
+ * renders it), and an inline "Analyze Portfolio" box that streams a data-grounded
+ * review from the backend.
+ */
+
 "use client";
 
 import { Briefcase, Plus, Sparkles, Trash2 } from "lucide-react";
@@ -19,6 +28,7 @@ import { formatPct, formatPrice, signClass } from "@/lib/utils";
 
 const COLORS = ["#2563eb", "#16a34a", "#d97706", "#7c3aed", "#dc2626", "#0891b2", "#65a30d"];
 
+// The add-holding form (symbol/quantity/avg price); clears itself on a successful add.
 function AddForm() {
   const add = useAddHolding();
   const [symbol, setSymbol] = React.useState("");
@@ -88,6 +98,9 @@ export default function PortfolioPage() {
   const [citations, setCitations] = React.useState<Citation[]>([]);
   const [busy, setBusy] = React.useState(false);
 
+  // Sends a fixed portfolio-review question straight to the backend (bypassing the
+  // chat thread store) — the router selects the portfolio agent since the local user
+  // has holdings.
   async function analyze() {
     if (busy) return;
     setBusy(true);

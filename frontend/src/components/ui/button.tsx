@@ -1,3 +1,11 @@
+/**
+ * Component: Frontend -> components/ui -> Button primitive
+ * Belongs to: the base UI kit (src/components/ui) — the standard clickable control used
+ * throughout the app.
+ * Purpose: one Button with variant (default/outline/ghost/secondary/destructive) and
+ * size (sm/md/lg/icon) props, so every button in the app shares the same styling system.
+ */
+
 import * as React from "react";
 
 import { cn } from "@/lib/utils";

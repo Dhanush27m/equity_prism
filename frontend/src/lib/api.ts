@@ -1,3 +1,12 @@
+/**
+ * Component: Frontend -> lib -> API client
+ * Belongs to: imported by every hook in lib/hooks.ts and directly by lib/use-chat.ts.
+ * Purpose: the single place that knows how to call the backend — builds the absolute
+ * URL (NEXT_PUBLIC_API_BASE, since frontend and backend are on different origins),
+ * attaches the X-Access-Key header from localStorage, and normalizes error handling
+ * (including detecting a 401 and broadcasting a global "log out" event).
+ */
+
 export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -9,26 +18,35 @@ export class ApiError extends Error {
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
 const ACCESS_KEY_STORAGE = "equity-prism-access-key";
 
+// Turns a relative /api/... path into an absolute URL against the deployed backend.
 export function apiUrl(path: string): string {
   return path.startsWith("/api") ? `${API_BASE}${path}` : path;
 }
 
+// Reads the access key the user entered at the gate (components/access-gate.tsx),
+// stored in localStorage so it survives page reloads.
 export function getAccessKey(): string {
   if (typeof window === "undefined") return "";
   return window.localStorage.getItem(ACCESS_KEY_STORAGE) ?? "";
 }
 
+// Sets or clears the stored access key.
 export function setAccessKey(key: string): void {
   if (typeof window === "undefined") return;
   if (key) window.localStorage.setItem(ACCESS_KEY_STORAGE, key);
   else window.localStorage.removeItem(ACCESS_KEY_STORAGE);
 }
 
+// Attaches the X-Access-Key header (if one is stored) to a request's headers.
 function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
   const key = getAccessKey();
   return key ? { ...extra, "X-Access-Key": key } : extra;
 }
 
+// Shared response handler: on 401 clears the stored key and fires a global event (the
+// access gate listens for this to re-prompt), on any other non-OK status throws an
+// ApiError with the backend's error detail, otherwise parses and returns the JSON body
+// (or undefined for a 204 No Content).
 async function handle<T>(res: Response): Promise<T> {
   if (res.status === 401) {
     setAccessKey("");
@@ -67,6 +85,8 @@ export async function apiDelete<T>(path: string): Promise<T> {
   return handle<T>(res);
 }
 
+// Multipart file upload (used for PDF documents) — no Content-Type header set so the
+// browser fills in the correct multipart boundary itself.
 export async function apiUpload<T>(path: string, file: File): Promise<T> {
   const form = new FormData();
   form.append("file", file);
@@ -76,6 +96,11 @@ export async function apiUpload<T>(path: string, file: File): Promise<T> {
 
 export type SSEEvent = Record<string, unknown> & { type: string };
 
+// Drives the streaming chat request: POSTs the question, then reads the response body
+// as a raw byte stream and manually parses Server-Sent-Events frames out of it
+// (fetch's streaming body reader, not EventSource — needed since this is a POST with a
+// body, which EventSource can't do), calling onEvent for each parsed event as it
+// arrives. Buffers partial frames across chunk boundaries.
 export async function streamChat(
   question: string,
   threadId: string | null,

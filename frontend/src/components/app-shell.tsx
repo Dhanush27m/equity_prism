@@ -1,3 +1,11 @@
+/**
+ * Component: Frontend -> components -> App layout shell
+ * Belongs to: wraps every page's content in app/layout.tsx (inside AccessGate).
+ * Purpose: the persistent page chrome — a fixed sidebar (desktop) or slide-over sidebar
+ * (mobile, via a hamburger menu in the header) plus the top Header, with page content
+ * rendered into the scrollable main area.
+ */
+
 "use client";
 
 import { X } from "lucide-react";

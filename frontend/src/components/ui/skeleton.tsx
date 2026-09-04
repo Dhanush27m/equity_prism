@@ -1,3 +1,10 @@
+/**
+ * Component: Frontend -> components/ui -> Skeleton primitive
+ * Belongs to: the base UI kit (src/components/ui) — rendered as a loading placeholder
+ * while a page's TanStack Query hooks are still fetching.
+ * Purpose: a shimmering gray block standing in for content that hasn't loaded yet.
+ */
+
 import { cn } from "@/lib/utils";
 
 export function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {

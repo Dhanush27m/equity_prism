@@ -4,6 +4,10 @@ Revision ID: 002e0f3c7c67
 Revises: 7817517903cd
 Create Date: 2026-07-25 12:11:51.245854
 
+Component: Backend -> Data Layer -> Alembic migration (second in the chain)
+Purpose: adds financial_metrics and risk_signals — the "stored-first" tables
+api/routes/market.py's /ratios and /risk endpoints read, populated by
+services/refresh.py, and what every specialist agent's snapshot is grounded in.
 """
 from typing import Sequence, Union
 

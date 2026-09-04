@@ -1,3 +1,12 @@
+/**
+ * Component: Frontend -> app -> Company page (route "/company/[symbol]")
+ * Belongs to: reached from search, the watchlist, or the screener — the deep-dive view
+ * for a single stock.
+ * Purpose: candlestick+volume price chart with period selection, key ratio tiles,
+ * tabbed financial statements (income/balance/cashflow, annual/quarterly), rule-based
+ * risk signals, and quick actions to watch the stock or jump into an AI analysis.
+ */
+
 "use client";
 
 import { AlertTriangle, MessageSquare, Star } from "lucide-react";
@@ -28,6 +37,8 @@ import { cn, formatCr, formatNumber, formatPct, formatPrice } from "@/lib/utils"
 
 const PERIODS = ["1M", "3M", "6M", "1Y", "5Y"];
 
+// The price chart card with its own period-selector state (always a live yfinance call
+// per period — see api/routes/market.py's /history).
 function ChartCard({ symbol }: { symbol: string }) {
   const [period, setPeriod] = React.useState("1Y");
   const { data, isLoading, isError, refetch } = useHistory(symbol, period);
@@ -63,6 +74,7 @@ function ChartCard({ symbol }: { symbol: string }) {
   );
 }
 
+// The 6-tile key-ratio row (stored-first data — see api/routes/market.py's /ratios).
 function MetricsRow({ symbol }: { symbol: string }) {
   const { data, isLoading } = useRatios(symbol);
   if (isLoading)
@@ -85,6 +97,8 @@ function MetricsRow({ symbol }: { symbol: string }) {
   );
 }
 
+// One financial-statement table (income/balance/cashflow) with its own annual/quarterly
+// toggle; shows up to the first 14 line items, values formatted in ₹ crores.
 function StatementTable({ symbol, kind }: { symbol: string; kind: string }) {
   const [pt, setPt] = React.useState("annual");
   const { data, isLoading } = useStatement(symbol, kind, pt);
@@ -140,6 +154,7 @@ function StatementTable({ symbol, kind }: { symbol: string; kind: string }) {
   );
 }
 
+// The rule-based risk-signals card (see services/ratios.py's compute_risk).
 function RiskCard({ symbol }: { symbol: string }) {
   const { data, isLoading } = useRisk(symbol);
   const signals = (data?.signals as RiskSignalItem[]) ?? [];

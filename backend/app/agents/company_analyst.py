@@ -1,7 +1,17 @@
+"""
+Component: Backend -> AI Orchestration Layer -> Specialist agent (LangGraph node)
+Belongs to: one of the five parallel specialists dispatched by the router.
+Purpose: produces a bull/bear/verdict analysis of a single stock, grounded strictly in
+the stored metrics + risk signals already pulled into the snapshot (never fetches or
+invents its own numbers).
+"""
+
 import json
 
 from app.llm.factory import complete
 
+# System prompt: enforces the "only use snapshot numbers" grounding rule and the exact
+# bull/bear/verdict markdown structure the synthesizer later expects to merge.
 SYS = (
     "You are a sell-side equity research analyst covering Indian listed companies. "
     "Use ONLY the numbers in the verified data snapshot; never invent or estimate figures. "
@@ -15,6 +25,10 @@ SYS = (
 )
 
 
+# LangGraph node entry point. No-ops (returns {}) if the router selected this agent
+# without a resolved symbol, or if that symbol isn't in the snapshot. Otherwise calls the
+# LLM with only that company's data and returns a fragment + citation + call metadata for
+# the reducers in AgentState to merge in.
 async def run(state: dict, config: dict | None = None) -> dict:
     tracer = (config or {}).get("configurable", {}).get("tracer")
     symbols = state.get("symbols", [])

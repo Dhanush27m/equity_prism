@@ -1,3 +1,12 @@
+/**
+ * Component: Frontend -> app -> Compare page (route "/compare")
+ * Belongs to: side-by-side stock comparison, backed by the comparator specialist agent
+ * for the AI verdict.
+ * Purpose: pick 2-5 stocks, see per-metric bar charts and a full metrics table (all from
+ * GET /api/companies/{symbol}/ratios via useMultiRatios — one query per symbol run in
+ * parallel), then optionally stream an AI-written relative verdict from the backend.
+ */
+
 "use client";
 
 import { GitCompareArrows, Sparkles, X } from "lucide-react";
@@ -28,6 +37,7 @@ import { cn, formatNumber, formatPct } from "@/lib/utils";
 
 const BAR_COLORS = ["#2563eb", "#16a34a", "#d97706", "#7c3aed", "#dc2626"];
 
+// Search-and-add stock picker, capped at 5 selections.
 function Picker({
   selected,
   onToggle,
@@ -68,6 +78,8 @@ function Picker({
   );
 }
 
+// One metric's bar chart across the selected stocks (isDecimal converts 0.15 -> 15,
+// matching the backend's ratio-field convention).
 function MetricBar({
   title,
   data,
@@ -127,6 +139,9 @@ export default function ComparePage() {
 
   const rows = selected.map((s, i) => ({ symbol: s, ratios: results[i]?.data }));
 
+  // Sends a comparison question straight to the backend (bypassing the chat thread
+  // store, like Documents/Portfolio's inline AI boxes) — the router will select the
+  // comparator agent since 2+ symbols are present in the question text.
   async function compare() {
     if (selected.length < 2 || busy) return;
     setBusy(true);
