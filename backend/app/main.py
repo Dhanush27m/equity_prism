@@ -21,8 +21,8 @@ settings = get_settings()
 
 app = FastAPI(title="Equity Prism API", version="0.1.0")
 
-install_observability(app)
 install_auth(app)
+install_observability(app)
 
 _origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()] or ["*"]
 

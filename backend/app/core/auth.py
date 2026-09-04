@@ -1,3 +1,5 @@
+import hmac
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
@@ -18,7 +20,7 @@ def install(app: FastAPI) -> None:
         if request.method == "OPTIONS" or not path.startswith("/api") or path in EXEMPT_PATHS:
             return await call_next(request)
         provided = request.headers.get("x-access-key", "")
-        if provided != settings.access_key:
+        if not hmac.compare_digest(provided, settings.access_key):
             request_id = getattr(request.state, "request_id", "-")
             return JSONResponse(
                 status_code=401,
