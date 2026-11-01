@@ -1,0 +1,356 @@
+@startuml EquityPrism_Database_Design
+title Equity Prism — Database Design (Single Supabase Postgres Instance)
+caption Every table, column, FK, index and constraint is traceable to backend/app/models/*.py and backend/alembic/versions/*.py
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam defaultFontSize 11
+skinparam linetype ortho
+
+skinparam class {
+  BorderColor #34495E
+  BackgroundColor #EAF2F8
+  FontColor #17202A
+  HeaderBackgroundColor #D5E8D4
+  AttributeFontSize 10
+}
+
+skinparam note {
+  BorderColor #7D6608
+  BackgroundColor #FEF9E7
+  FontColor #7D6608
+}
+
+package "Postgres Extensions" #F5F5F5 {
+  note as ExtNote
+    **pgvector** — CREATE EXTENSION IF NOT EXISTS vector
+    (migration 7817517903cd)
+    Enables the Vector(384) column type and HNSW indexing.
+  end note
+}
+
+package "Core Domain (seeded / refreshed)" #EAF2F8 {
+
+  class companies <<(T,#90CAF9) Table>> {
+    **id** : Integer <<PK>>
+    --
+    symbol : String(32) <<UNIQUE INDEX>>
+    name : String(255)
+    sector : String(128) [nullable]
+    industry : String(128) [nullable]
+    market_cap : BigInteger [nullable]
+    exchange : String(16) [default "NSE"]
+    currency : String(8) [nullable]
+    current_price : Float [nullable]
+    --
+    created_at : DateTime(tz) [server_default now()]
+    updated_at : DateTime(tz) [server_default now(), onupdate now()]
+  }
+
+  note bottom of companies
+    **Model:** models/company.py
+    **Seeded by:** seed/seed_companies.py (Nifty 50)
+    **Refreshed by:** services/refresh.py → refresh_symbol()
+    **Read by:** snapshot.py (resolve_symbols, build_snapshot),
+    api/routes/companies.py, api/routes/market.py
+    **TimestampMixin** provides created_at / updated_at
+  end note
+
+  class financial_metrics <<(T,#90CAF9) Table>> {
+    **id** : Integer <<PK>>
+    --
+    company_id : Integer <<FK → companies.id, UNIQUE INDEX>>
+    pe : Float [nullable]
+    forward_pe : Float [nullable]
+    pb : Float [nullable]
+    ps : Float [nullable]
+    roe : Float [nullable]
+    roa : Float [nullable]
+    roce : Float [nullable]
+    debt_to_equity : Float [nullable]
+    current_ratio : Float [nullable]
+    quick_ratio : Float [nullable]
+    gross_margin : Float [nullable]
+    operating_margin : Float [nullable]
+    net_margin : Float [nullable]
+    revenue_growth : Float [nullable]
+    earnings_growth : Float [nullable]
+    dividend_yield : Float [nullable]
+    fcf_yield : Float [nullable]
+    eps : Float [nullable]
+    beta : Float [nullable]
+    --
+    updated_at : DateTime(tz) [server_default now(), onupdate now()]
+  }
+
+  note right of financial_metrics
+    **Model:** models/metrics.py → FinancialMetric
+    **One row per company** (unique on company_id)
+    **Written by:** services/refresh.py (batch upsert)
+    **Read by:** snapshot.py → build_snapshot(),
+    api/routes/market.py /ratios endpoint
+    **ON DELETE CASCADE** from companies
+  end note
+
+  class risk_signals <<(T,#90CAF9) Table>> {
+    **id** : Integer <<PK>>
+    --
+    company_id : Integer <<FK → companies.id, UNIQUE INDEX>>
+    score : Integer [default 0]
+    signals : JSONB [default []]
+    --
+    updated_at : DateTime(tz) [server_default now(), onupdate now()]
+  }
+
+  note right of risk_signals
+    **Model:** models/metrics.py → RiskSignal
+    **One row per company** (unique on company_id)
+    **Written by:** services/ratios.py → compute_risk()
+    **Read by:** snapshot.py → build_snapshot(),
+    api/routes/market.py /risk endpoint
+    **signals** is a JSON array of rule-based flags
+    e.g. ["high_leverage", "weak_margins"]
+    **ON DELETE CASCADE** from companies
+  end note
+
+  class financial_statements <<(T,#90CAF9) Table>> {
+    **id** : Integer <<PK>>
+    --
+    company_id : Integer <<FK → companies.id, INDEX>>
+    statement_type : String(16)
+    period_type : String(16)
+    period_end : Date
+    data : JSONB
+    --
+    created_at : DateTime(tz) [server_default now()]
+    ==
+    <<UNIQUE>> (company_id, statement_type,
+    period_type, period_end)
+    name: uq_financial_period
+  }
+
+  note bottom of financial_statements
+    **Model:** models/financials.py → FinancialStatement
+    **statement_type:** "income" | "balance" | "cashflow"
+    **period_type:** "annual" | "quarterly"
+    **data:** raw JSONB (full statement as dict)
+    **Currently:** statements served live from yfinance;
+    table exists for future stored-first serving.
+    **ON DELETE CASCADE** from companies
+  end note
+
+}
+
+package "User & Personalisation" #FDEBD0 {
+
+  class users <<(T,#FFE082) Table>> {
+    **id** : Integer <<PK>>
+    --
+    username : String(64) <<UNIQUE>>
+    created_at : DateTime(tz) [server_default now()]
+  }
+
+  note bottom of users
+    **Model:** models/user.py
+    **Single-user system:** one row (username="local")
+    auto-created by api/deps.py → get_local_user()
+    No JWT / OAuth — shared access-key gate only.
+    All per-user tables FK into this.
+  end note
+
+  class portfolio_holdings <<(T,#FFE082) Table>> {
+    **id** : Integer <<PK>>
+    --
+    user_id : Integer <<FK → users.id, INDEX>>
+    company_id : Integer <<FK → companies.id>> [nullable]
+    symbol : String(32) <<INDEX>>
+    quantity : Float
+    avg_price : Float
+    --
+    created_at : DateTime(tz) [server_default now()]
+  }
+
+  note right of portfolio_holdings
+    **Model:** models/portfolio.py → PortfolioHolding
+    **Written by:** api/routes/portfolio.py (user CRUD)
+    **Read by:** snapshot.py → build_snapshot(),
+    portfolio specialist agent, portfolio page
+    **P&L computed at read-time** from Company.current_price
+    (never stored here)
+    **user_id ON DELETE CASCADE**
+    **company_id ON DELETE SET NULL**
+  end note
+
+  class watchlist_items <<(T,#FFE082) Table>> {
+    **id** : Integer <<PK>>
+    --
+    user_id : Integer <<FK → users.id, INDEX>>
+    company_id : Integer <<FK → companies.id>> [nullable]
+    symbol : String(32) <<INDEX>>
+    --
+    created_at : DateTime(tz) [server_default now()]
+    ==
+    <<UNIQUE>> (user_id, symbol)
+    name: uq_watchlist_user_symbol
+  }
+
+  note bottom of watchlist_items
+    **Model:** models/watchlist.py → WatchlistItem
+    **Written/read by:** api/routes/watchlist.py
+    **Unique constraint** prevents duplicate tracking
+    **user_id ON DELETE CASCADE**
+    **company_id ON DELETE SET NULL**
+  end note
+
+}
+
+package "RAG Subsystem (pgvector)" #E8F5E9 {
+
+  class documents <<(T,#A5D6A7) Table>> {
+    **id** : Integer <<PK>>
+    --
+    user_id : Integer <<FK → users.id, INDEX>>
+    filename : String(512)
+    status : String(16) [default "pending"]
+    num_pages : Integer [nullable]
+    num_chunks : Integer [default 0]
+    error : Text [nullable]
+    --
+    created_at : DateTime(tz) [server_default now()]
+  }
+
+  note right of documents
+    **Model:** models/document.py → Document
+    **Status lifecycle:** pending → processing → ready | failed
+    **Written by:** api/routes/documents.py (upload),
+    rag/ingestion.py (status/chunk updates)
+    **Read by:** api/routes/documents.py (list/get),
+    snapshot.py (document count check)
+    **user_id ON DELETE CASCADE**
+    **ORM relationship:** has-many → document_chunks
+    (cascade="all, delete-orphan")
+  end note
+
+  class document_chunks <<(T,#A5D6A7) Table>> {
+    **id** : Integer <<PK>>
+    --
+    document_id : Integer <<FK → documents.id, INDEX>>
+    chunk_index : Integer
+    content : Text
+    page_number : Integer [nullable]
+    embedding : Vector(384) [nullable]
+    --
+    <<HNSW INDEX>> (embedding vector_cosine_ops)
+    <<GIN INDEX>> (to_tsvector('english', content))
+  }
+
+  note bottom of document_chunks
+    **Model:** models/document.py → DocumentChunk
+    **EMBEDDING_DIM = 384** (all-MiniLM-L6-v2)
+    **Written by:** rag/ingestion.py → process_document()
+    via rag/chunking.py + rag/embeddings.py
+    **Read by:** rag/retrieval.py
+    → vector_search() uses HNSW cosine index
+    → full_text_search() uses GIN tsvector index
+    → results merged via Reciprocal Rank Fusion (RRF)
+    **document_id ON DELETE CASCADE**
+    **Indexes created in:** migration c4f1a2b3d5e6
+  end note
+
+  class rag_traces <<(T,#A5D6A7) Table>> {
+    **id** : Integer <<PK>>
+    --
+    question : Text
+    answer : Text
+    chunk_ids : JSONB [default []]
+    citations : JSONB [default []]
+    model : String(64) [nullable]
+    source : String(16) [nullable]
+    trace_id : String(64) [nullable]
+    --
+    created_at : DateTime(tz) [server_default now()]
+  }
+
+  note right of rag_traces
+    **Model:** models/rag.py → RagTrace
+    **Written by:** agents/document_research.py
+    → _persist_trace() (best-effort, try/except)
+    Also written by: eval/rag_eval.py (offline eval)
+    **Audit-only table:** not read by any live endpoint.
+    Kept for RAG quality inspection & debugging.
+    **No FK** — standalone log table
+    **trace_id** links to LangFuse trace (if enabled)
+  end note
+
+}
+
+' ─── Relationships ─────────────────────────────────────────────
+
+companies "1" --> "*" financial_metrics : company_id\n(CASCADE, unique)
+companies "1" --> "*" risk_signals : company_id\n(CASCADE, unique)
+companies "1" --> "*" financial_statements : company_id\n(CASCADE)
+companies "1" --> "*" portfolio_holdings : company_id\n(SET NULL)
+companies "1" --> "*" watchlist_items : company_id\n(SET NULL)
+
+users "1" --> "*" documents : user_id\n(CASCADE)
+users "1" --> "*" portfolio_holdings : user_id\n(CASCADE)
+users "1" --> "*" watchlist_items : user_id\n(CASCADE)
+
+documents "1" --> "*" document_chunks : document_id\n(CASCADE, delete-orphan)
+
+' ─── Migration History ─────────────────────────────────────────
+
+note as MigrationNote
+  **Alembic Migration Chain (backend/alembic/versions/):**
+  ┌─────────────────────────────────────────────────────────┐
+  │ 1. 7817517903cd — initial_schema                        │
+  │    Creates: pgvector extension, companies, users,       │
+  │    documents, document_chunks, financial_statements,    │
+  │    portfolio_holdings, watchlist_items                   │
+  ├─────────────────────────────────────────────────────────┤
+  │ 2. 002e0f3c7c67 — financial_metrics_and_risk_signals    │
+  │    Creates: financial_metrics, risk_signals              │
+  │    (both with unique company_id index)                   │
+  ├─────────────────────────────────────────────────────────┤
+  │ 3. c4f1a2b3d5e6 — rag_traces_and_chunk_indexes          │
+  │    Creates: rag_traces table                             │
+  │    Creates: HNSW index on document_chunks.embedding     │
+  │    Creates: GIN index on document_chunks.content        │
+  └─────────────────────────────────────────────────────────┘
+  RUN_MIGRATIONS=1 env var triggers
+  `alembic upgrade head` at startup (main.py)
+end note
+
+' ─── Design Decisions ──────────────────────────────────────────
+
+note as DesignNote
+  **Key Database Design Decisions:**
+  ─────────────────────────────────────────────────
+  1. **Single Postgres instance** (Supabase free tier)
+     — no separate vector DB. pgvector extension adds
+     vector columns + HNSW indexing inside the same DB.
+
+  2. **Hybrid retrieval indexes on document_chunks:**
+     HNSW (cosine) for semantic ANN search +
+     GIN (tsvector) for keyword full-text search,
+     merged via RRF in rag/retrieval.py.
+
+  3. **One row per company** for financial_metrics and
+     risk_signals (unique constraint on company_id) —
+     always upserted, never appended.
+
+  4. **JSONB columns** for flexible data:
+     financial_statements.data (raw statement dict),
+     risk_signals.signals (flag array),
+     rag_traces.chunk_ids & citations (arrays).
+
+  5. **ON DELETE CASCADE** from parent tables, except
+     company_id in portfolio/watchlist uses SET NULL
+     (holdings survive if a company row is dropped).
+
+  6. **pool_pre_ping=True** on SQLAlchemy engine
+     (core/database.py) — survives Supabase auto-pause.
+end note
+
+@enduml

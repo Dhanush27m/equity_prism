@@ -17,7 +17,7 @@ _resolved = False
 # Hardcoded Groq per-model pricing (USD per 1M tokens) used to estimate generation cost
 # in the LangFuse dashboard — Groq's API does not return cost directly.
 MODEL_PRICING_USD_PER_1M = {
-    "llama-3.3-70b-versatile": {"input": 0.59, "output": 0.79},
+    "qwen/qwen3.8-27b": {"input": 0.80, "output": 4.00},
     "llama-3.1-8b-instant": {"input": 0.05, "output": 0.08},
 }
 

@@ -43,7 +43,7 @@ class Settings(BaseSettings):
 
     # LLM provider settings: Groq is the primary provider, Ollama the local fallback.
     groq_api_key: str = ""
-    groq_model: str = "llama-3.3-70b-versatile"
+    groq_model: str = "qwen/qwen3.8-27b"
     ollama_base_url: str = "http://ollama:11434"
     ollama_model: str = "llama3.1:8b"
 

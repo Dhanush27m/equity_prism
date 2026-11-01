@@ -1,0 +1,187 @@
+================================================================================
+  EQUITY PRISM — HLD CHEAT SHEET (Interview-Ready)
+================================================================================
+
+ELEVATOR PITCH
+  Local-first AI equity research platform. Multi-agent LLM pipeline + hybrid
+  RAG for citation-backed analysis of Indian NSE stocks. Zero cost, free-tier
+  infra only.
+
+================================================================================
+ARCHITECTURE (5 layers, top to bottom)
+================================================================================
+
+  Browser -> Next.js 15 -> FastAPI -> LangGraph agents -> Supabase Postgres
+                                                       -> yfinance / Google News
+
+--------------------------------------------------------------------------------
+1. FRONTEND — Next.js 15 + TypeScript + Tailwind v4
+--------------------------------------------------------------------------------
+  9 pages: Landing, Chat, Company deep-dive, Comparator, Portfolio,
+           Document Q&A, Screener, News, Settings
+
+  Chat flow: streamChat() in lib/api.ts -> POST /api/chat/stream
+  Uses fetch + ReadableStream (not EventSource, because EventSource is GET-only
+  and we need to POST the question body).
+
+--------------------------------------------------------------------------------
+2. API — FastAPI
+--------------------------------------------------------------------------------
+  Auth: Every request needs X-Access-Key header.
+        Compared with hmac.compare_digest() (constant-time, prevents timing
+        side-channel attacks — plain == short-circuits on first mismatch).
+
+  Middleware order trick: Starlette's add_middleware() uses insert(0, ...),
+  so LAST registered = runs FIRST. We register auth first, observability second
+  -> observability runs first -> 401s still get a request_id for debugging.
+
+  SSE: events flow as "data: {json}\n\n" — thinking -> fragments -> answer
+       -> citations -> done.
+
+--------------------------------------------------------------------------------
+3. AI ORCHESTRATION — the core (4 steps)
+--------------------------------------------------------------------------------
+
+  STEP A: SNAPSHOT (before any LLM call)
+    File: agents/snapshot.py
+    - Fuzzy-matches user question to stock symbols
+    - Pre-fetches ALL data: metrics, risk, portfolio, news, doc count
+    ★ KEY DESIGN: "Snapshot-first grounding" = anti-hallucination mechanism.
+      Agents get a read-only dict. They can't query DBs or APIs themselves.
+      If a number isn't in the snapshot, the LLM can't invent it.
+
+  STEP B: ROUTER
+    File: agents/router.py
+    Three stages: Deterministic keywords -> LLM refinement -> Validation
+    - Keywords pick agents (e.g. "news" -> sentiment, "compare" -> comparator)
+    - LLM refines the pick (JSON mode, temp=0)
+    - Validation drops any agent name not in ALLOWED_AGENTS set
+    - If LLM fails, deterministic plan is the fallback
+
+  STEP C: FAN-OUT (parallel agents)
+    File: agents/graph.py
+    LangGraph StateGraph with Send() primitive — runs selected agents in parallel.
+    5 specialists:
+      1. company_analyst — single-stock deep dive
+      2. comparator      — side-by-side comparison
+      3. sentiment        — news sentiment
+      4. portfolio        — user holdings analysis
+      5. document_research — RAG Q&A (only agent with its own I/O)
+    Agents 1-4 read ONLY the snapshot. Zero DB imports. Pure functions.
+
+    ★ WHY LANGGRAPH (not LangChain AgentExecutor):
+      AgentExecutor = LLM controls tool calls = unpredictable looping.
+      LangGraph = developer controls the graph = LLM just fills in content.
+
+  STEP D: SYNTHESIZER (after graph, NOT a graph node)
+    File: agents/synthesizer.py
+    Collects all fragments, sends to LLM with "rely ONLY on specialist notes"
+    prompt, streams response token-by-token via SSE.
+    Not a graph node because it's strictly sequential — no need for a barrier.
+
+--------------------------------------------------------------------------------
+4. RAG PIPELINE — hybrid search
+--------------------------------------------------------------------------------
+
+  INGESTION (user uploads PDF):
+    PDF -> pdfplumber -> chunk (RecursiveCharacterTextSplitter) -> embed -> store
+    Embedding: fastembed/ONNX in cloud (~50MB), sentence-transformers locally
+    (same model: all-MiniLM-L6-v2, but PyTorch is 2GB = OOM on 512MB Render)
+
+  RETRIEVAL (during chat):
+    Two parallel searches merged with RRF (Reciprocal Rank Fusion):
+      1. Vector search (cosine similarity, HNSW index) — semantic matches
+      2. Full-text search (tsvector + GIN index) — exact keyword matches
+    Score per chunk = sum of 1/(k + rank) across both lists.
+
+    ★ WHY HYBRID: Vector misses exact terms ("EBITDA margin").
+      Keywords miss paraphrases. RRF gets both.
+
+  RAG traces logged to rag_traces table (best-effort, never breaks chat).
+
+--------------------------------------------------------------------------------
+5. DATA LAYER — single Supabase Postgres
+--------------------------------------------------------------------------------
+  Relational tables + pgvector in ONE database (no separate Pinecone).
+  ★ WHY: At thousands of chunks, HNSW gives sub-ms queries. One DB = one
+    connection pool, one backup, one free tier.
+
+  pool_pre_ping=True: Supabase pauses after 7 days idle -> stale connections.
+  Pre-ping sends SELECT 1 before each query -> auto-reconnects silently.
+
+--------------------------------------------------------------------------------
+6. EXTERNAL DATA
+--------------------------------------------------------------------------------
+  yfinance: market data, no API key, cached per-symbol. Agents NEVER call it
+            directly — snapshot reads from DB tables filled by offline batch.
+  Google News RSS: feedparser, cached, no auth.
+  LLM: Groq (qwen3.8-27b, free) -> Ollama fallback (local only).
+       3 retries + exponential backoff on LLM calls only.
+
+================================================================================
+HOSTING (zero cost)
+================================================================================
+  Vercel   — frontend (auto-deploy from GitHub)
+  Render   — backend (sleeps after 15 min, ~50s cold start)
+  Supabase — Postgres + pgvector (pauses after 7 days idle)
+
+  Same codebase for local (Docker Compose) and cloud. Env vars toggle:
+    CACHE_BACKEND, INGEST_MODE, EMBEDDING_BACKEND, DB_SSL, DB_POOLED
+
+================================================================================
+HONEST LIMITATIONS (say these yourself before they ask)
+================================================================================
+  1. No per-user auth — shared access key only, no JWT/OAuth
+  2. No cross-turn memory — chat history is client-side React state
+  3. No scheduled refresh — manual batch only, data can go stale
+  4. No circuit breaker or rate limiter
+  5. Agents have no tool-use — snapshot in, text out
+  6. No WebSocket — SSE is server->client only
+
+================================================================================
+END-TO-END TRACE: "How is Infosys performing this quarter?"
+================================================================================
+  1. Frontend POSTs to /api/chat/stream
+  2. Auth checks X-Access-Key (hmac.compare_digest)
+  3. Snapshot: fuzzy-match "Infosys" -> INFY, fetch metrics/risk/news
+  4. Router: keywords -> [company_analyst, sentiment], LLM confirms
+  5. Graph: Send() fans out both agents in parallel
+  6. Agents read snapshot, call Groq, return fragments
+  7. Synthesizer streams merged answer via SSE
+  8. Frontend renders progressively
+
+  Totals: 4 LLM calls, ~5 DB queries, 1 RSS call (likely cached)
+
+================================================================================
+TOP INTERVIEW Q&A (short answers)
+================================================================================
+
+  Q: Why LangGraph not AgentExecutor?
+  A: Developer controls the graph, not the LLM. Predictable, parallel, no loops.
+
+  Q: How prevent hallucination?
+  A: Snapshot-first. All data fetched before LLM runs. Agents get read-only dict.
+
+  Q: Why not Pinecone?
+  A: pgvector in Postgres. Sub-ms at my scale. One DB, one free tier.
+
+  Q: Groq goes down?
+  A: Fallback to Ollama (local only). 3x retry with backoff. Hosted = error msg.
+
+  Q: Concurrent users?
+  A: FastAPI async. Each chat is a coroutine. Connection pool with pre-ping.
+
+  Q: Why synthesizer not a graph node?
+  A: Strictly sequential, always last. Direct call is simpler than a barrier.
+
+  Q: Why hybrid RAG?
+  A: Vector misses exact terms, keywords miss paraphrases. RRF merges both.
+
+  Q: Cost?
+  A: Zero. Vercel + Render + Supabase + Groq free tiers. Tradeoff: cold starts.
+
+  Q: How to scale?
+  A: Add JWT auth, paid Postgres, Celery for all background work, dedicated
+     vector DB past ~1M chunks, API-layer caching.
+
+================================================================================

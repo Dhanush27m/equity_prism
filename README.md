@@ -65,7 +65,7 @@ Ask questions in plain English and a team of specialist AI agents collaborates t
 
 **Agents:** LangGraph (StateGraph + `MemorySaver` checkpointer, parallel `Send` fan-out) · custom async LLM factory (httpx)
 
-**LLM:** Groq API — Llama 3.3 70B (`llama-3.3-70b-versatile`), 3× retry with backoff, streaming + non-streaming
+**LLM:** Groq API — Qwen 3.8 27B (`qwen/qwen3.8-27b`), 3× retry with backoff, streaming + non-streaming
 
 **RAG:** pdfplumber (extract) · LangChain `RecursiveCharacterTextSplitter` 1000/200 (chunk) · **fastembed** ONNX `all-MiniLM-L6-v2` (embed, 384-dim, no torch) · pgvector cosine + Postgres full-text · Reciprocal Rank Fusion
 
