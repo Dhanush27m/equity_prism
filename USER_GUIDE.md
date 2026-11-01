@@ -10,11 +10,9 @@ Equity Prism is a live AI equity-research assistant for Indian stocks (NSE/BSE).
 
 ## 1. Getting started
 
-1. Open the app: **https://equity-prism.vercel.app**
-2. Enter the **access key** at the prompt (the shared password for the app).
-3. You're in. Navigate using the **left sidebar**. The **top bar** has a stock search box (type a name or symbol like `TCS` or `Reliance`) and a **light/dark theme toggle**.
-
-> First load after a while may take ~1 minute — the free backend wakes from sleep. Give it a moment and it stays fast afterwards.
+1. Start the backend and frontend (see README.md for setup).
+2. Open **http://localhost:3001** in your browser.
+3. Navigate using the **left sidebar**. The **top bar** has a stock search box (type a name or symbol like `TCS` or `Reliance`) and a **light/dark theme toggle**.
 
 ---
 
@@ -122,9 +120,8 @@ Theme and app preferences.
 
 | Symptom | Likely cause / fix |
 |---------|--------------------|
-| Everything shows "something went wrong" | Backend is waking up (wait ~1 min) — or the Supabase database is paused; open the Supabase dashboard and click **Restore**. |
-| First page load is very slow | Normal free-tier cold start — the backend was asleep and is waking. |
-| Chat errors once, then works | The AI briefly hit a rate limit and retried — try again. |
-| Uploaded PDF stuck on "processing" | Give it a moment; large PDFs take longer to embed on the free instance. |
+| Everything shows "something went wrong" | Check that the backend is running on port 8000 and PostgreSQL is up. |
+| Chat returns an error | Make sure Ollama is running (`ollama serve`) and the model is pulled (`ollama pull llama3.1:8b`). |
+| Uploaded PDF stuck on "processing" | Give it a moment; large PDFs take longer to embed locally. |
 
-For the full overview and architecture, see **[README.md](./README.md)**. For every link and endpoint, see **[LINKS.md](./LINKS.md)**.
+For the full overview and architecture, see **[README.md](./README.md)**.

@@ -2,9 +2,9 @@
 Component: Backend -> LLM Layer
 Belongs to: the single choke point every agent, the router, and the synthesizer call
 through (app/agents/*.py all import `complete`/`stream_complete` from here — nothing
-calls Groq or Ollama directly).
+calls Ollama or Groq directly).
 Purpose: a minimal (httpx-based, no SDK) chat-completion client with a provider fallback
-chain (Groq first, Ollama second) and retry-with-backoff, in both non-streaming and
+chain (Ollama first, Groq second) and retry-with-backoff, in both non-streaming and
 streaming (SSE) forms.
 """
 
@@ -76,10 +76,6 @@ async def _ollama(messages: list[dict], temperature: float, max_tokens: int, jso
         return text, usage
 
 
-# Main non-streaming entry point used by the router, every specialist agent, and the
-# non-streaming synthesizer. Tries Groq up to MAX_ATTEMPTS times with exponential
-# backoff, then falls through to Ollama the same way; raises only if every attempt on
-# both providers fails. Logs a trace generation on success if a tracer is supplied.
 async def complete(
     messages: list[dict],
     *,
@@ -91,6 +87,18 @@ async def complete(
 ) -> LLMResult:
     start = time.monotonic()
     errors: list[str] = []
+
+    for attempt in range(MAX_ATTEMPTS):
+        try:
+            text, usage = await _ollama(messages, temperature, max_tokens, json_mode)
+            latency = int((time.monotonic() - start) * 1000)
+            result = LLMResult(text, settings.ollama_model, "ollama", latency, usage)
+            if tracer:
+                tracer.generation(label, result.model, messages, text, usage=usage, latency_ms=latency)
+            return result
+        except Exception as exc:
+            errors.append(f"ollama({attempt}): {exc}")
+            await asyncio.sleep(2**attempt)
 
     if settings.groq_api_key:
         for attempt in range(MAX_ATTEMPTS):
@@ -104,18 +112,6 @@ async def complete(
             except Exception as exc:
                 errors.append(f"groq({attempt}): {exc}")
                 await asyncio.sleep(2**attempt)
-
-    for attempt in range(MAX_ATTEMPTS):
-        try:
-            text, usage = await _ollama(messages, temperature, max_tokens, json_mode)
-            latency = int((time.monotonic() - start) * 1000)
-            result = LLMResult(text, settings.ollama_model, "ollama", latency, usage)
-            if tracer:
-                tracer.generation(label, result.model, messages, text, usage=usage, latency_ms=latency)
-            return result
-        except Exception as exc:
-            errors.append(f"ollama({attempt}): {exc}")
-            await asyncio.sleep(2**attempt)
 
     raise RuntimeError("LLM unavailable: " + " | ".join(errors[-4:]))
 
@@ -181,11 +177,6 @@ async def _ollama_stream(messages: list[dict], temperature: float, max_tokens: i
                     break
 
 
-# Streaming entry point used by the SSE synthesizer path (app/agents/synthesizer.py's
-# stream()). Yields {"type": "token", "delta": ...} events as they arrive from Groq (or
-# Ollama if Groq fails before producing any output), then a final {"type": "meta", ...}
-# event with the model/source/latency once the stream ends. If a stream fails partway
-# through, already-yielded tokens are kept rather than restarted or discarded.
 async def stream_complete(
     messages: list[dict],
     *,
@@ -200,29 +191,32 @@ async def stream_complete(
     usage: dict = {}
     start = time.monotonic()
 
-    if settings.groq_api_key:
-        started = False
+    started = False
+    try:
+        async for delta in _ollama_stream(messages, temperature, max_tokens):
+            started = True
+            collected.append(delta)
+            yield {"type": "token", "delta": delta}
+        source, model = "ollama", settings.ollama_model
+    except Exception:
+        if started:
+            source, model = "ollama", settings.ollama_model
+        else:
+            collected.clear()
+
+    if source is None and settings.groq_api_key:
         try:
             async for delta in _groq_stream(messages, temperature, max_tokens, usage):
-                started = True
                 collected.append(delta)
                 yield {"type": "token", "delta": delta}
             source, model = "groq", settings.groq_model
-        except Exception:
-            if started:
-                source, model = "groq", settings.groq_model
-            else:
-                collected.clear()
-
-    if source is None:
-        try:
-            async for delta in _ollama_stream(messages, temperature, max_tokens):
-                collected.append(delta)
-                yield {"type": "token", "delta": delta}
-            source, model = "ollama", settings.ollama_model
         except Exception as exc:
             yield {"type": "token", "delta": f"\n\n_(generation error: {exc})_"}
             source, model = "error", None
+
+    if source is None:
+        yield {"type": "token", "delta": "\n\n_(LLM unavailable — is Ollama running?)_"}
+        source, model = "error", None
 
     text = "".join(collected)
     latency = int((time.monotonic() - start) * 1000)

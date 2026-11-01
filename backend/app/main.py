@@ -23,7 +23,6 @@ from app.api.routes import (
     screener,
     watchlist,
 )
-from app.core.auth import install as install_auth
 from app.core.config import get_settings
 from app.core.observability import install as install_observability
 
@@ -31,15 +30,8 @@ settings = get_settings()
 
 app = FastAPI(title="Equity Prism API", version="0.1.0")
 
-# Order matters: Starlette's add_middleware() effectively makes the last-registered
-# middleware run first, so registering auth before observability puts the request-id
-# middleware ahead of the access-key gate in actual execution order — otherwise a 401
-# response would be built before request.state.request_id even exists.
-install_auth(app)
 install_observability(app)
 
-# Cross-origin config: the Vercel frontend calls this API from a different origin, so
-# CORS must allow it explicitly (CORS_ORIGINS env var) or "*" for local/dev.
 _origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()] or ["*"]
 
 app.add_middleware(

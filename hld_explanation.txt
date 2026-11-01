@@ -11,7 +11,7 @@ ELEVATOR PITCH
 ARCHITECTURE (5 layers, top to bottom)
 ================================================================================
 
-  Browser -> Next.js 15 -> FastAPI -> LangGraph agents -> Supabase Postgres
+  Browser -> Next.js 15 -> FastAPI -> LangGraph agents -> PostgreSQL + pgvector
                                                        -> yfinance / Google News
 
 --------------------------------------------------------------------------------
@@ -27,13 +27,10 @@ ARCHITECTURE (5 layers, top to bottom)
 --------------------------------------------------------------------------------
 2. API — FastAPI
 --------------------------------------------------------------------------------
-  Auth: Every request needs X-Access-Key header.
-        Compared with hmac.compare_digest() (constant-time, prevents timing
-        side-channel attacks — plain == short-circuits on first mismatch).
+  Auth: None (local-only, open access). No access key or login required.
 
-  Middleware order trick: Starlette's add_middleware() uses insert(0, ...),
-  so LAST registered = runs FIRST. We register auth first, observability second
-  -> observability runs first -> 401s still get a request_id for debugging.
+  Middleware: observability middleware sets a request_id on every request
+  for logging and error tracing.
 
   SSE: events flow as "data: {json}\n\n" — thinking -> fragments -> answer
        -> citations -> done.
@@ -86,7 +83,7 @@ ARCHITECTURE (5 layers, top to bottom)
   INGESTION (user uploads PDF):
     PDF -> pdfplumber -> chunk (RecursiveCharacterTextSplitter) -> embed -> store
     Embedding: fastembed/ONNX in cloud (~50MB), sentence-transformers locally
-    (same model: all-MiniLM-L6-v2, but PyTorch is 2GB = OOM on 512MB Render)
+    (same model: all-MiniLM-L6-v2; fastembed is a lighter alternative for constrained environments)
 
   RETRIEVAL (during chat):
     Two parallel searches merged with RRF (Reciprocal Rank Fusion):
@@ -100,13 +97,13 @@ ARCHITECTURE (5 layers, top to bottom)
   RAG traces logged to rag_traces table (best-effort, never breaks chat).
 
 --------------------------------------------------------------------------------
-5. DATA LAYER — single Supabase Postgres
+5. DATA LAYER — single PostgreSQL + pgvector
 --------------------------------------------------------------------------------
   Relational tables + pgvector in ONE database (no separate Pinecone).
   ★ WHY: At thousands of chunks, HNSW gives sub-ms queries. One DB = one
     connection pool, one backup, one free tier.
 
-  pool_pre_ping=True: Supabase pauses after 7 days idle -> stale connections.
+  pool_pre_ping=True: handles stale/dropped connections gracefully.
   Pre-ping sends SELECT 1 before each query -> auto-reconnects silently.
 
 --------------------------------------------------------------------------------
@@ -115,23 +112,22 @@ ARCHITECTURE (5 layers, top to bottom)
   yfinance: market data, no API key, cached per-symbol. Agents NEVER call it
             directly — snapshot reads from DB tables filled by offline batch.
   Google News RSS: feedparser, cached, no auth.
-  LLM: Groq (qwen3.8-27b, free) -> Ollama fallback (local only).
-       3 retries + exponential backoff on LLM calls only.
+  LLM: Ollama (llama3.1:8b, local). 3 retries + exponential backoff.
 
 ================================================================================
-HOSTING (zero cost)
+RUNS LOCALLY (no cloud dependencies)
 ================================================================================
-  Vercel   — frontend (auto-deploy from GitHub)
-  Render   — backend (sleeps after 15 min, ~50s cold start)
-  Supabase — Postgres + pgvector (pauses after 7 days idle)
-
-  Same codebase for local (Docker Compose) and cloud. Env vars toggle:
-    CACHE_BACKEND, INGEST_MODE, EMBEDDING_BACKEND, DB_SSL, DB_POOLED
+  Frontend: Next.js dev server on port 3001
+  Backend:  FastAPI/Uvicorn on port 8000
+  Database: local PostgreSQL + pgvector
+  LLM:      Ollama on port 11434
+  Cache:    in-memory (no Redis needed)
+  Ingest:   FastAPI background tasks (no Celery needed)
 
 ================================================================================
 HONEST LIMITATIONS (say these yourself before they ask)
 ================================================================================
-  1. No per-user auth — shared access key only, no JWT/OAuth
+  1. No user auth — open access, designed for local use
   2. No cross-turn memory — chat history is client-side React state
   3. No scheduled refresh — manual batch only, data can go stale
   4. No circuit breaker or rate limiter
@@ -142,13 +138,12 @@ HONEST LIMITATIONS (say these yourself before they ask)
 END-TO-END TRACE: "How is Infosys performing this quarter?"
 ================================================================================
   1. Frontend POSTs to /api/chat/stream
-  2. Auth checks X-Access-Key (hmac.compare_digest)
-  3. Snapshot: fuzzy-match "Infosys" -> INFY, fetch metrics/risk/news
-  4. Router: keywords -> [company_analyst, sentiment], LLM confirms
-  5. Graph: Send() fans out both agents in parallel
-  6. Agents read snapshot, call Groq, return fragments
-  7. Synthesizer streams merged answer via SSE
-  8. Frontend renders progressively
+  2. Snapshot: fuzzy-match "Infosys" -> INFY, fetch metrics/risk/news
+  3. Router: keywords -> [company_analyst, sentiment], LLM confirms
+  4. Graph: Send() fans out both agents in parallel
+  5. Agents read snapshot, call Ollama, return fragments
+  6. Synthesizer streams merged answer via SSE
+  7. Frontend renders progressively
 
   Totals: 4 LLM calls, ~5 DB queries, 1 RSS call (likely cached)
 
@@ -163,10 +158,10 @@ TOP INTERVIEW Q&A (short answers)
   A: Snapshot-first. All data fetched before LLM runs. Agents get read-only dict.
 
   Q: Why not Pinecone?
-  A: pgvector in Postgres. Sub-ms at my scale. One DB, one free tier.
+  A: pgvector in Postgres. Sub-ms at my scale. One DB, simpler ops.
 
-  Q: Groq goes down?
-  A: Fallback to Ollama (local only). 3x retry with backoff. Hosted = error msg.
+  Q: Why Ollama / local LLM?
+  A: No API keys, no rate limits, no cost. Runs fully offline. 3x retry with backoff.
 
   Q: Concurrent users?
   A: FastAPI async. Each chat is a coroutine. Connection pool with pre-ping.
@@ -177,11 +172,8 @@ TOP INTERVIEW Q&A (short answers)
   Q: Why hybrid RAG?
   A: Vector misses exact terms, keywords miss paraphrases. RRF merges both.
 
-  Q: Cost?
-  A: Zero. Vercel + Render + Supabase + Groq free tiers. Tradeoff: cold starts.
-
   Q: How to scale?
-  A: Add JWT auth, paid Postgres, Celery for all background work, dedicated
-     vector DB past ~1M chunks, API-layer caching.
+  A: Add JWT auth, move to a managed DB, Celery for background work, dedicated
+     vector DB past ~1M chunks, API-layer caching, cloud LLM provider.
 
 ================================================================================

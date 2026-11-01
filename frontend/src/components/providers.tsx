@@ -12,7 +12,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import * as React from "react";
 
-import { AccessGate } from "@/components/access-gate";
 
 type Theme = "light" | "dark";
 
@@ -63,7 +62,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ThemeContext.Provider value={{ theme, toggle }}>
       <QueryClientProvider client={client}>
-        <AccessGate>{children}</AccessGate>
+        {children}
       </QueryClientProvider>
     </ThemeContext.Provider>
   );

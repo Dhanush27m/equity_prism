@@ -1,5 +1,5 @@
 @startuml EquityPrism_Database_Design
-title Equity Prism — Database Design (Single Supabase Postgres Instance)
+title Equity Prism — Database Design (Single PostgreSQL Instance)
 caption Every table, column, FK, index and constraint is traceable to backend/app/models/*.py and backend/alembic/versions/*.py
 
 skinparam backgroundColor #FFFFFF
@@ -155,7 +155,7 @@ package "User & Personalisation" #FDEBD0 {
     **Model:** models/user.py
     **Single-user system:** one row (username="local")
     auto-created by api/deps.py → get_local_user()
-    No JWT / OAuth — shared access-key gate only.
+    No auth — local-only, open access.
     All per-user tables FK into this.
   end note
 
@@ -327,7 +327,7 @@ end note
 note as DesignNote
   **Key Database Design Decisions:**
   ─────────────────────────────────────────────────
-  1. **Single Postgres instance** (Supabase free tier)
+  1. **Single Postgres instance** (local)
      — no separate vector DB. pgvector extension adds
      vector columns + HNSW indexing inside the same DB.
 
@@ -350,7 +350,7 @@ note as DesignNote
      (holdings survive if a company row is dropped).
 
   6. **pool_pre_ping=True** on SQLAlchemy engine
-     (core/database.py) — survives Supabase auto-pause.
+     (core/database.py) — survives stale connections.
 end note
 
 @enduml
